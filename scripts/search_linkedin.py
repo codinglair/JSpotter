@@ -19,6 +19,7 @@ import argparse
 import csv
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -32,17 +33,22 @@ from profile_support import add_profile_argument, configured_path, load_profile_
 LINKEDIN_SEARCH = "https://www.linkedin.com/jobs/search/?keywords={keywords}&location={location}{remote_filter}&sortBy=DD"
 
 # JavaScript to extract job listings from the page
-EXTRACT_JS = """
+EXTRACT_JS = r"""
 JSON.stringify(
-  Array.from(document.querySelectorAll('a[href*="/jobs/view/"]'))
-    .map(a => {
-      const li = a.closest('li, .job-search-card, [class*="job-card"]');
-      const title = li?.querySelector('h3, [class*="title"]')?.textContent?.trim() || a.textContent.trim();
-      const company = li?.querySelector('h4, [class*="company"]')?.textContent?.trim() || '';
-      const location = li?.querySelector('[class*="location"]')?.textContent?.trim() || '';
-      return {title, company, location, url: a.href.split('?')[0]};
+  Array.from(document.querySelectorAll('li[data-occludable-job-id]'))
+    .map(card => {
+      const jobId = card.dataset.occludableJobId;
+      const titleLink = card.querySelector('a.job-card-list__title--link');
+      const title = (titleLink?.getAttribute('aria-label') || '')
+        .replace(/\s+with verification\s*$/i, '')
+        .trim();
+      const company = card.querySelector('.artdeco-entity-lockup__subtitle')?.textContent?.trim() || '';
+      const location = card.querySelector('.artdeco-entity-lockup__caption li span[dir="ltr"]')?.textContent?.trim() || '';
+      const url = jobId ? `https://www.linkedin.com/jobs/view/${jobId}/` : '';
+      return {title, company, location, url};
     })
-    .filter(j => j.title && j.title !== 'See who Arcadia has hired for this role')
+    .filter(j => j.title && j.url)
+    .filter((job, index, jobs) => jobs.findIndex(candidate => candidate.url === job.url) === index)
 )
 """
 
@@ -72,7 +78,7 @@ SEE_MORE_JS = """
 """
 
 # JavaScript to get current job count
-COUNT_JS = "document.querySelectorAll('a[href*=\"/jobs/view/\"]').length"
+COUNT_JS = "document.querySelectorAll('li[data-occludable-job-id]').length"
 
 # JavaScript to scroll the job results list
 SCROLL_JS = """
@@ -147,14 +153,25 @@ def build_search_urls(config, keywords, local=True, remote=True, **legacy):
     return urls
 
 
+def canonical_job_url(url):
+    """Return a stable LinkedIn job URL when the URL contains a numeric job ID."""
+    value = str(url or "")
+    path = re.search(r"linkedin\.com/jobs/view/([^/?#]+)", value, re.IGNORECASE)
+    job_id = re.search(r"(\d+)$", path.group(1)) if path else None
+    return f"https://www.linkedin.com/jobs/view/{job_id.group(1)}/" if job_id else value.split("?")[0]
+
+
 def dedupe_jobs(jobs):
-    """Remove duplicate jobs by URL."""
+    """Remove duplicate jobs by canonical URL."""
     seen = set()
     unique = []
     for j in jobs:
-        key = j.get("url", "")
+        key = canonical_job_url(j.get("url", ""))
         if key and key not in seen:
             seen.add(key)
+            j = dict(j)
+            j["url"] = key
+            j["title"] = re.sub(r"\s+with verification\s*$", "", str(j.get("title") or ""), flags=re.IGNORECASE)
             unique.append(j)
     return unique
 
