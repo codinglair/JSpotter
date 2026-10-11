@@ -9,7 +9,10 @@
     "domains": [],
     "locations": {
       "remote_us": true,
-      "local": ["chicago", "illinois"]
+      "local": ["chicago", "illinois"],
+      "home_state": "illinois",
+      "home_state_aliases": ["illinois", "il"],
+      "no_relocation": true
     },
     "employment_history": [
       {

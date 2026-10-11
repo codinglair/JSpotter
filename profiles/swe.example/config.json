@@ -6,7 +6,7 @@
     "skills": ["java", "spring boot", "sql", "maven", "git", "aws", "docker", "kafka"],
     "certifications": [],
     "domains": ["backend services"],
-    "locations": {"remote_us": true, "local": ["chicago", "illinois"]},
+    "locations": {"remote_us": true, "local": ["chicago", "illinois"], "home_state": "illinois", "home_state_aliases": ["illinois", "il"], "no_relocation": true},
     "employment_history": [{"employer": "Example Software Works", "title": "Senior Java Engineer", "start": "2021", "end": "Present"}]
   },
   "search": {

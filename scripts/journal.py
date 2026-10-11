@@ -120,6 +120,8 @@ PRIORITY_COLORS = {
     "High": PatternFill(start_color="FFD7D7", end_color="FFD7D7", fill_type="solid"),
     "Medium": PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid"),
     "Low": PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid"),
+    "Review": PatternFill(start_color="D9EAF7", end_color="D9EAF7", fill_type="solid"),
+    "Ineligible": PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid"),
 }
 
 SCORE_COLORS = {
@@ -173,6 +175,8 @@ def init_journal(path=JOURNAL_PATH, overwrite=False):
         ["High", "Top match, apply within 24h"],
         ["Medium", "Good match, apply this week"],
         ["Low", "Possible match, monitor"],
+        ["Review", "Eligibility is unverified; manual review required"],
+        ["Ineligible", "Conflicts with a configured hard constraint"],
         ["", ""],
         ["Search Mode (Jobs sheet)", ""],
         ["local", "Found via a configured local search"],
@@ -375,7 +379,7 @@ def validate_journal_rows(ws):
     """Validate journal rows for data integrity. Returns list of error strings."""
     errors = []
     valid_statuses = {"Not Applied", "Applied", "Interview", "Rejected", "Closed", "Withdrawn", None, ""}
-    valid_priorities = {"High", "Medium", "Low", None, ""}
+    valid_priorities = {"High", "Medium", "Low", "Review", "Ineligible", None, ""}
     
     for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=False), start=2):
         company = str(row[1].value) if row[1].value else ""

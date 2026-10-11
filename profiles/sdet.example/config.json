@@ -6,7 +6,7 @@
     "skills": ["java", "selenium", "playwright", "junit", "testng", "rest assured", "sql", "maven", "git", "ci/cd"],
     "certifications": [],
     "domains": ["test automation"],
-    "locations": {"remote_us": true, "local": ["chicago", "illinois"]},
+    "locations": {"remote_us": true, "local": ["chicago", "illinois"], "home_state": "illinois", "home_state_aliases": ["illinois", "il"], "no_relocation": true},
     "employment_history": [{"employer": "Example Quality Labs", "title": "Senior SDET", "start": "2021", "end": "Present"}]
   },
   "search": {

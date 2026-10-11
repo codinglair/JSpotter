@@ -35,6 +35,16 @@ Use `profiles\swe` for the Java profile. Never put private profiles under versio
 - Mandatory validation failures prevent PDF generation.
 - JSpotter does not implement autonomous application submission. Opening an Apply link is only for discovering an employer ATS URL and must stop before form submission.
 
+## Eligibility and scoring
+
+Technical fit and application eligibility are separate:
+
+- `Eligible` confirms compatibility with configured remote/local constraints. Normal High/Medium/Low priority applies.
+- `Ineligible` records an explicit conflict such as required attendance or relocation outside accepted geography. Priority is `Ineligible`, while the numeric technical score is preserved.
+- `Unverified` means the posting is ambiguous or lacks work-arrangement evidence. Priority is `Review`, never an automatic High recommendation.
+
+Only skills stated in mandatory language are scored as required. Preferred skills are recorded separately, and ambiguous mentions remain unknown. Unknown skill, seniority, domain, or certification requirements receive no automatic match credit. Use `--rescore` after changing eligibility or scoring configuration; application-history sheets are preserved.
+
 ## Tests
 
 ```powershell

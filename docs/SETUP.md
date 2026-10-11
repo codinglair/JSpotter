@@ -23,6 +23,14 @@ Copy-Item .\templates\theme.template.json .\profiles\swe\theme.json
 
 Replace every sample fact in each `config.json` and `MASTER_PROFILE.md` with verified candidate information. Do not list qualifications the candidate cannot substantiate.
 
+Under `candidate.locations`, configure:
+
+- `remote_us`: whether confirmed remote-US roles are accepted.
+- `local`: lowercase city/state terms accepted for on-site or hybrid attendance.
+- `home_state`: used to detect explicit remote-state exclusions.
+- `home_state_aliases`: full name and postal abbreviation used in state restrictions.
+- `no_relocation`: whether explicit relocation requirements are disqualifying.
+
 Initialize journals once:
 
 ```powershell
@@ -51,6 +59,14 @@ Process a saved extract, update the journal, fetch descriptions, and score:
 ```
 
 Failed description retrieval leaves fit as `Unknown`, so a later scoring run retries it.
+
+To safely recalculate existing rows after changing profile constraints or scoring rules:
+
+```powershell
+py .\scripts\run_scoring.py --profile-dir .\profiles\sdet --rescore
+```
+
+This updates scoring fields on existing job rows without adding jobs or changing the Applications sheet. `Review` and `Ineligible` are deliberately non-actionable priorities.
 
 ## Resume validation and generation
 

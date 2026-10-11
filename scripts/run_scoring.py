@@ -43,6 +43,8 @@ PRIORITY_COLORS = {
     'High': PatternFill(start_color='FFD7D7', end_color='FFD7D7', fill_type='solid'),
     'Medium': PatternFill(start_color='FFF2CC', end_color='FFF2CC', fill_type='solid'),
     'Low': PatternFill(start_color='D9EAD3', end_color='D9EAD3', fill_type='solid'),
+    'Review': PatternFill(start_color='D9EAF7', end_color='D9EAF7', fill_type='solid'),
+    'Ineligible': PatternFill(start_color='D9D9D9', end_color='D9D9D9', fill_type='solid'),
 }
 
 HEADERS = {
@@ -97,9 +99,25 @@ def fetch_job_description(url, timeout=20):
         return None
 
 
+def determine_priority(match_score, eligibility, high_threshold=75, medium_threshold=50):
+    """Eligibility gates whether a technical match is actionable."""
+    if eligibility == "Ineligible":
+        return "Ineligible"
+    if eligibility != "Eligible":
+        return "Review"
+    if match_score is None:
+        return "Review"
+    if match_score >= high_threshold:
+        return "High"
+    if match_score >= medium_threshold:
+        return "Medium"
+    return "Low"
+
+
 def main():
     parser = argparse.ArgumentParser(description="Score unscored jobs for a selected candidate profile")
     add_profile_argument(parser)
+    parser.add_argument("--rescore", action="store_true", help="Recalculate existing scores without changing application history")
     args = parser.parse_args()
     selected_dir, config = load_profile_config(args.profile_dir)
     candidate = config.get("candidate", {})
@@ -140,7 +158,7 @@ def main():
         if not url:
             continue
         url = str(url).strip()
-        if match_score is None:
+        if args.rescore or match_score is None:
             unscored.append({
                 "row": row_idx,
                 "url": url,
@@ -206,8 +224,14 @@ def main():
         if not desc or len(desc) < 50:
             # Can't score without description
             # Leave score fields empty so a later run retries the fetch.
+            _, match_details = calculate_match_score(job, desc, profile, candidate, config)
+            eligibility = match_details.get("eligibility", "Unverified")
+            reason = match_details.get("eligibility_reason", "Eligibility not verified")
+            priority = determine_priority(None, eligibility, _high_thresh, _med_thresh)
             ws.cell(row=row_idx, column=COL["interview_prob"], value="Unknown")
-            ws.cell(row=row_idx, column=COL["fit_notes"], value="Description unavailable; retry pending")
+            ws.cell(row=row_idx, column=COL["fit_notes"], value=f"Eligibility: {eligibility} — {reason} | Description unavailable; retry pending")
+            ws.cell(row=row_idx, column=COL["priority"], value=priority)
+            ws.cell(row=row_idx, column=COL["priority"]).fill = PRIORITY_COLORS[priority]
             continue
 
         # Calculate all scores
@@ -217,25 +241,21 @@ def main():
         indicator = calculate_fit_indicator(match_score, match_details)
 
         # Determine priority — read thresholds from config
-        if match_score >= _high_thresh:
-            priority = "High"
-        elif match_score >= _med_thresh:
-            priority = "Medium"
-        else:
-            priority = "Low"
+        eligibility = match_details.get("eligibility", "Unverified")
+        priority = determine_priority(match_score, eligibility, _high_thresh, _med_thresh)
 
         # Missing skills from match details
         missing = match_details.get("missing_qualifications", [])
         missing_str = ", ".join(missing) if missing else ""
 
         # Build fit notes
-        notes = []
+        notes = [f"Eligibility: {eligibility} — {match_details.get('eligibility_reason', '')}"]
         if match_details.get("matched_domains"):
             notes.append(f"Strong: {', '.join(match_details['matched_domains'][:3])}")
         if missing:
             notes.append(f"Gap: {', '.join(missing[:2])}")
-        if not notes:
-            notes.append("No configured skill evidence detected")
+        if match_details.get("unknown"):
+            notes.append(f"Unknown: {', '.join(match_details['unknown'][:3])}")
         fit_notes = " | ".join(notes)
 
         # Write to journal
@@ -297,23 +317,12 @@ def main():
     wb.save(str(journal))
     print(f"Scored {scored} jobs. Journal updated.")
 
-    # Summary
     from collections import Counter
-    priorities = Counter()
-    for job in unscored:
-        desc = descriptions.get(job["url"], "")
-        if not desc or len(desc) < 50:
-            priorities["Unknown"] += 1
-            continue
-        ms, _ = calculate_match_score(job, desc, profile, candidate, config)
-        if ms >= _high_thresh:
-            priorities["High"] += 1
-        elif ms >= _med_thresh:
-            priorities["Medium"] += 1
-        else:
-            priorities["Low"] += 1
-
-    print(f"\nNew jobs priority: High={priorities['High']} Medium={priorities['Medium']} Low={priorities['Low']} Unknown={priorities['Unknown']}")
+    priorities = Counter(
+        str(ws.cell(row=job["row"], column=COL["priority"]).value or "Review")
+        for job in unscored
+    )
+    print(f"\nNew jobs priority: High={priorities['High']} Medium={priorities['Medium']} Low={priorities['Low']} Review={priorities['Review']} Ineligible={priorities['Ineligible']}")
 
 
 if __name__ == "__main__":
