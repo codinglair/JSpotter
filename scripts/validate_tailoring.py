@@ -68,7 +68,7 @@ def validate_entry(entry, idx=0, candidate=None, settings=None):
     }
     unsupported_injected = sorted(injected - declared)
     if settings.get("require_supported_keywords", True) and unsupported_injected:
-        errors.append(f"{company}: ATS keywords unsupported by candidate profile — {', '.join(unsupported_injected)}")
+        errors.append(f"{company}: job terms unsupported by candidate profile — {', '.join(unsupported_injected)}")
 
     summary = str(entry.get("tailored_summary") or "")
     if sum(summary.count(mark) for mark in ".!?") > int(settings.get("summary_max_sentences", 4)):

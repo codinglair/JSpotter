@@ -16,7 +16,7 @@ Use this format when the cron job delivers the daily job scan results to Telegra
 
 🔥 High Priority (New)
 {COMPANY} — {TITLE}
-Match: {SCORE} | ATS: {ATS} | Prob: {PROB}
+Technical match: {SCORE} | Fit: {FIT} | Confidence: {CONFIDENCE}
 {LOCATION}
 {URL}
 
@@ -32,7 +32,7 @@ Previously applied: {APPLIED_COUNT} | Interviews: {INTERVIEW_COUNT} | Rejected: 
 
 1. **Always include the date** in the header
 2. **Always include the summary stats** — even if zero new jobs
-3. **High priority jobs get full detail** — company, title, match/ATS/prob, location, URL
+3. **High priority jobs get full detail** — company, title, technical match, fit, evidence confidence, location, URL
 4. **Medium/Low priority: count only** — no company names or details, just the number
 5. **Low priority jobs are not listed** — just the count
 6. **If no new jobs, say so** — don't skip the message

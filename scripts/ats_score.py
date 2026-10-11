@@ -1,7 +1,12 @@
-"""Explainable candidate/job keyword overlap scoring."""
+"""Deprecated legacy keyword-overlap scoring.
+
+This module remains importable for external caller compatibility only. Its result is not
+an ATS compatibility assessment and is not consumed by JSpotter's active workflows.
+"""
 
 
 def calculate_ats_score(job_description, profile_text, candidate=None, vocabulary=None):
+    """Return the legacy overlap score (deprecated; do not use for decisions)."""
     candidate = candidate or {}
     terms = {
         str(value).strip().lower()

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Resume PDF Generator — generates tailored resume PDFs from LLM tailoring JSON.
-Uses ReportLab for professional formatting with ATS-friendly plain text.
+Uses ReportLab for professional formatting with machine-readable plain text.
 
 Usage:
   python3 generate_pdf.py output/tailoring_results_all.json
@@ -172,7 +172,7 @@ def generate_pdf(data, filepath):
         canvas.restoreState()
 
     def header_later(canvas, doc):
-        """Minimal header on page 2+ — just name, no contact info. Saves space and avoids ATS confusion."""
+        """Minimal header on page 2+ — just name, no contact info. Saves space and avoids repeated contact data."""
         canvas.saveState()
         canvas.setFont('Helvetica', 8)
         canvas.setFillColor(HexColor(T_COLORS["subtitle"]))

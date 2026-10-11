@@ -1,4 +1,5 @@
 import json
+import io
 import sys
 import tempfile
 import unittest
@@ -9,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from ats_score import calculate_ats_score
+from interview_prob import calculate_interview_prob
 from match_score import assess_eligibility, calculate_match_score, identify_skill_requirements
 from profile_support import configured_path, load_profile_config, safe_output_path
 from search_linkedin import filter_by_keywords
@@ -46,6 +48,11 @@ class FilteringTests(unittest.TestCase):
 
 
 class ProfileAndScoringTests(unittest.TestCase):
+    def test_interview_compatibility_alias_ignores_legacy_ats(self):
+        self.assertEqual("Moderate", calculate_interview_prob(60, ats_score=0))
+        self.assertEqual("Moderate", calculate_interview_prob(60, ats_score=100))
+        self.assertEqual("Unknown", calculate_interview_prob(None, ats_score=None))
+
     def test_profile_paths_are_isolated(self):
         with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as second:
             for directory, name in ((first, "one"), (second, "two")):
@@ -333,11 +340,15 @@ class WorkflowTests(unittest.TestCase):
             add_jobs([{"title": "QA Automation Engineer", "company": "Cognizant", "location": "Raleigh, NC", "url": url}], journal)
             description = "Applicants must have Selenium and C#. This hybrid role requires attendance three days per week in Raleigh."
             (output / "descriptions_cache.json").write_text(json.dumps({url: description}), encoding="utf-8")
-            with patch.object(sys, "argv", ["run_scoring.py", "--profile-dir", str(profile)]):
+            with patch("ats_score.calculate_ats_score") as legacy_ats, patch.object(
+                sys, "argv", ["run_scoring.py", "--profile-dir", str(profile)]
+            ):
                 run_scoring.main()
+            legacy_ats.assert_not_called()
             workbook = load_workbook(journal)
             row = list(workbook["Jobs"].iter_rows(min_row=2, values_only=True))[0]
             self.assertIsInstance(row[6], int)
+            self.assertIsNone(row[7])
             self.assertIn("c#", row[8])
             self.assertIn("Eligibility: Ineligible", row[11])
             self.assertEqual("Ineligible", row[12])
@@ -374,18 +385,21 @@ class WorkflowTests(unittest.TestCase):
             workbook = load_workbook(journal)
             workbook["Jobs"].cell(2, 15, "Applied")
             workbook["Jobs"].cell(2, 17, "2026-01-02")
+            workbook["Jobs"].cell(2, 8, 100)  # historical, deprecated ATS value
             workbook["Jobs"].delete_cols(18)  # simulate a journal created before confidence existed
             workbook["Applications"].append(["2026-01-01", "Existing Co", "Existing Role", "2026-01-02", "v1", "No", "Applied"])
             workbook.save(journal)
             description = "Senior SDET role requiring Java Selenium and JUnit for reliable automated regression suites."
             (output / "descriptions_cache.json").write_text(json.dumps({url: description}), encoding="utf-8")
-            with patch.object(sys, "argv", ["run_scoring.py", "--profile-dir", str(profile)]):
+            output_text = io.StringIO()
+            with patch.object(sys, "argv", ["run_scoring.py", "--profile-dir", str(profile)]), patch("sys.stdout", output_text):
                 run_scoring.main()
             with patch.object(sys, "argv", ["run_scoring.py", "--profile-dir", str(profile), "--rescore"]):
                 run_scoring.main()
             workbook = load_workbook(journal)
             row = list(workbook["Jobs"].iter_rows(min_row=2, values_only=True))[0]
             self.assertIsInstance(row[6], int)
+            self.assertEqual(100, row[7])
             self.assertIn(row[10], {"Strong", "Moderate", "Weak"})
             self.assertEqual(2, workbook["Jobs"].max_row)
             self.assertEqual("Applied", row[14])
@@ -394,6 +408,7 @@ class WorkflowTests(unittest.TestCase):
             self.assertIn(row[17], {"High", "Medium", "Low"})
             self.assertEqual("Existing Co", workbook["Applications"].cell(2, 2).value)
             self.assertEqual("Applied", workbook["Applications"].cell(2, 7).value)
+            self.assertNotIn(" ats=", output_text.getvalue().lower())
 
 
 if __name__ == "__main__":

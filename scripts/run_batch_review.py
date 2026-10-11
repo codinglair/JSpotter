@@ -83,7 +83,7 @@ For EACH resume, score:
 1. EXPERIENCE BAR (20 pts)
 2. SUMMARY SCANABILITY (20 pts)
 3. RED FLAGS (20 pts)
-4. ATS KEYWORD MATCH (20 pts)
+4. JOB LANGUAGE ALIGNMENT (20 pts)
 5. QUANTIFIED IMPACT (20 pts)
 
 ### Hiring Manager (0-100)
@@ -100,7 +100,7 @@ Write a JSON ARRAY to the output file specified below. Each element should have:
   "company": "<company>",
   "title": "<title>",
   "hr_score": <0-100>,
-  "hr_breakdown": {{"experience_bar": "X/20 — notes", "summary_scanability": "X/20 — notes", "red_flags": "X/20 — notes", "ats_keywords": "X/20 — notes", "quantified_impact": "X/20 — notes"}},
+  "hr_breakdown": {{"experience_bar": "X/20 — notes", "summary_scanability": "X/20 — notes", "red_flags": "X/20 — notes", "job_language_alignment": "X/20 — notes", "quantified_impact": "X/20 — notes"}},
   "hr_issues": ["issue 1", "issue 2"],
   "hr_notes": "1-2 sentence assessment",
   "hm_score": <0-100>,

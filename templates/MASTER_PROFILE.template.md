@@ -76,7 +76,7 @@ Example: "Shipped LLM-powered review-triage agent classifying sentiment and auto
 **Platforms & Integrations:**
 - [Tools]
 
-> **Note:** Adjust tools per job application to match ATS requirements.
+> **Note:** Adjust tools per job application to reflect relevant, verified job requirements.
 
 ---
 
@@ -100,12 +100,12 @@ Example: "Shipped LLM-powered review-triage agent classifying sentiment and auto
 
 ## 8. Case Study Index
 
-> Achievement details live in the Career History section. This index maps engagements to domains and ATS keywords.
+> Achievement details live in the Career History section. This index maps engagements to domains and relevant job terms.
 
 | CS | Source | Domain | Keywords |
 |----|--------|--------|----------|
-| CS1 | [Company] ([dates]) | [Domain] | [ATS keywords] |
-| CS2 | [Company] ([dates]) | [Domain] | [ATS keywords] |
+| CS1 | [Company] ([dates]) | [Domain] | [Relevant job terms] |
+| CS2 | [Company] ([dates]) | [Domain] | [Relevant job terms] |
 
 ---
 

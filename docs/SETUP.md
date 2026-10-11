@@ -66,7 +66,9 @@ To safely recalculate existing rows after changing profile constraints or scorin
 py .\scripts\run_scoring.py --profile-dir .\profiles\sdet --rescore
 ```
 
-This updates scoring fields on existing job rows without adding jobs or changing application status/history. Older journals receive an appended `Evidence Confidence` column; the migration is safe to run repeatedly. `Review` and `Ineligible` are deliberately non-actionable priorities.
+This updates supported scoring fields on existing job rows without adding jobs or changing application status/history. Older journals receive an appended `Evidence Confidence` column; the migration is safe to run repeatedly. The retained `ATS Score` column is compatibility-only: new values are not generated, and historical values survive rescoring but are deprecated, untrusted, and excluded from recommendations. `Review` and `Ineligible` are deliberately non-actionable priorities.
+
+JSpotter currently supports Technical Match, Evidence Confidence, Geographic Eligibility, Fit Indicator, and Priority. It does not predict resume parsing, ATS acceptance, or employer-specific ATS rankings. A future resume-specific compatibility assessment would be a separate feature, not a keyword-overlap replacement.
 
 ## Resume validation and generation
 

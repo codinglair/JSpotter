@@ -39,7 +39,7 @@ CRITICAL STRUCTURE RULES:
 13. Use read_file and write_file tools for reading/writing JSON files. Do NOT write or execute custom Python scripts (no `python3 -c`, no .py files, no temp scripts, no execute_code). Use ONLY read_file, write_file, and search_files for all file operations. Pipeline scripts (quality_gate.py, generate_pdf.py, etc.) are run by the parent agent, not by you.
 14. cover_letter: 3-4 paragraphs, professional, no pandering. Do NOT include a closing (no "Sincerely," "Thank you for your consideration," or name at the end) — the PDF generator adds a standard business closing automatically.
 
-Master profile: [PATH TO MASTER_PROFILE.md] (READ THIS — it has the formula-style bullets, tools, and ATS keywords)
+Master profile: [PATH TO MASTER_PROFILE.md] (READ THIS — it has the formula-style bullets, tools, and verified job terms)
 ```
 
 ## Goal Block (adapt per job)
@@ -56,7 +56,7 @@ Produce a single JSON object with these fields:
 - tailored_strengths: array of 7-8 simple labels (2-4 words each)
 - tailored_highlights: array of 3-4 objects with "header" and "bullets". FIRST must be the primary employer as one entry with 4-5 bullets using the formula.
 - tailored_tools: object with ONLY categories relevant to this job — dict format, NOT a list. Adjust tools within each category to match what the job asks for.
-- ats_keywords_injected: array of ATS keywords from the job posting naturally present
+- ats_keywords_injected: legacy field name; array of relevant job terms naturally present and supported by the candidate profile
 - highlights_changed_summary: 1 sentence
 - cover_letter: 3-4 paragraphs, professional, no pandering. Do NOT include a closing — the PDF generator adds a standard business closing automatically.
 

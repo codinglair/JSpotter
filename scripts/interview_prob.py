@@ -15,5 +15,9 @@ def calculate_fit_indicator(match_score, details=None):
 
 
 def calculate_interview_prob(match_score, ats_score=None, title="", description="", location=""):
-    """Deprecated compatibility alias returning a label, never a percentage."""
+    """Deprecated compatibility alias returning a label, never a percentage.
+
+    ``ats_score`` and the remaining legacy context arguments are accepted but ignored so
+    existing positional and keyword callers keep working without legacy ATS influence.
+    """
     return calculate_fit_indicator(match_score)

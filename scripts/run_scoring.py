@@ -34,7 +34,6 @@ DESCS_DIR = BASE_DIR / "output"
 
 # Import scoring algorithms
 sys.path.insert(0, str(BASE_DIR))
-from ats_score import calculate_ats_score
 from match_score import calculate_match_score
 from interview_prob import calculate_fit_indicator
 from profile_support import add_profile_argument, configured_path, load_profile_config
@@ -249,9 +248,8 @@ def main():
             ws.cell(row=row_idx, column=COL["priority"]).fill = PRIORITY_COLORS[priority]
             continue
 
-        # Calculate all scores
-        vocabulary = config.get("scoring", {}).get("skill_vocabulary")
-        ats_score, ats_details = calculate_ats_score(desc, profile, candidate, vocabulary)
+        # Calculate the supported technical fit metrics. The legacy ATS column is
+        # intentionally untouched so new rows stay blank and historical values survive.
         match_score, match_details = calculate_match_score(job, desc, profile, candidate, config)
         indicator = calculate_fit_indicator(match_score, match_details)
 
@@ -279,7 +277,6 @@ def main():
 
         # Write to journal
         ws.cell(row=row_idx, column=COL["match_score"], value=match_score)
-        ws.cell(row=row_idx, column=COL["ats_score"], value=ats_score if ats_score is not None else "Unknown")
         ws.cell(row=row_idx, column=COL["missing_skills"], value=missing_str)
         ws.cell(row=row_idx, column=COL["interview_prob"], value=indicator)
         ws.cell(row=row_idx, column=COL["fit_notes"], value=fit_notes)
@@ -298,8 +295,7 @@ def main():
             ws.cell(row=row_idx, column=COL["status"], value="Not Applied")
 
         scored += 1
-        ats_display = ats_score if ats_score is not None else "N/A"
-        print(f"  {job['company'][:20]:<20} match={match_score:>3} ats={str(ats_display):>3} fit={indicator:<8} {priority:<7} {job['title'][:30]}")
+        print(f"  {job['company'][:20]:<20} match={match_score:>3} fit={indicator:<8} {priority:<7} {job['title'][:30]}")
 
     # Ensure auto-filters on all sheets
     from openpyxl.utils import get_column_letter

@@ -7,7 +7,7 @@ Use this template for LLM-based resume quality review (Gate 2).
 1. EXPERIENCE BAR (20 pts): Does the candidate meet required years and seniority?
 2. SUMMARY SCANABILITY (20 pts): Clear value proposition in 6 seconds?
 3. RED FLAGS (20 pts): Job hopping, gaps, title inconsistencies, unbelievable claims?
-4. ATS KEYWORD MATCH (20 pts): Key job terms appear naturally in resume?
+4. JOB LANGUAGE ALIGNMENT (20 pts): Relevant job terms supported by the candidate appear naturally in the resume?
 5. QUANTIFIED IMPACT (20 pts): Specific, believable metrics showing scope and results?
 
 ## Hiring Manager Review (0-100)

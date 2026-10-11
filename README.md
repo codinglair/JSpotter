@@ -49,7 +49,9 @@ Only skills stated in mandatory language are scored as required. Preferred skill
 
 Evidence confidence is stored separately as High, Medium, or Low. Required-skill evidence contributes two evidence points; role, seniority, domain, and certification evidence contribute one each. Fewer than two points is Low, two or three is Medium, and four or more is High when required skills are explicit. Ambiguous skill language lowers confidence by one level. Unspecified domain or certification requirements do not independently lower confidence. Low confidence forces `Review`; Medium and High confidence use the configured score thresholds after the eligibility gate.
 
-Use `--rescore` after changing eligibility or scoring configuration. Existing journals are migrated idempotently by appending an `Evidence Confidence` column, preserving legacy column positions and application-history fields.
+The former `ATS Score` was a keyword-overlap percentage, not a measurement of resume parsing or employer-specific applicant-tracking compatibility, so it has been deprecated and removed from scoring and prioritization. The journal retains its `ATS Score` column for workbook compatibility: new rows leave it blank, and any historical values are untrusted legacy data that must not guide decisions. Current evaluation consists of Technical Match, Evidence Confidence, Geographic Eligibility, Fit Indicator, and Priority. A genuine resume-to-job ATS assessment may be introduced later as a separate capability; none is currently implemented.
+
+Use `--rescore` after changing eligibility or scoring configuration. Existing journals are migrated idempotently by appending an `Evidence Confidence` column, preserving legacy column positions, historical ATS cells, and application-history fields.
 
 ## Tests
 
