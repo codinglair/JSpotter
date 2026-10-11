@@ -99,13 +99,15 @@ def fetch_job_description(url, timeout=20):
         return None
 
 
-def determine_priority(match_score, eligibility, high_threshold=75, medium_threshold=50):
+def determine_priority(match_score, eligibility, high_threshold=75, medium_threshold=50, confidence="High"):
     """Eligibility gates whether a technical match is actionable."""
     if eligibility == "Ineligible":
         return "Ineligible"
     if eligibility != "Eligible":
         return "Review"
     if match_score is None:
+        return "Review"
+    if confidence == "Low":
         return "Review"
     if match_score >= high_threshold:
         return "High"
@@ -143,12 +145,23 @@ def main():
     wb = load_workbook(str(journal))
     ws = wb["Jobs"]
 
+    # Append-only, idempotent migration keeps every legacy column index stable.
+    headers = {
+        str(ws.cell(1, column).value or "").strip(): column
+        for column in range(1, ws.max_column + 1)
+    }
+    confidence_col = headers.get("Evidence Confidence")
+    if confidence_col is None:
+        confidence_col = ws.max_column + 1
+        ws.cell(1, confidence_col, "Evidence Confidence")
+
     COL = {
         "date_found": 1, "company": 2, "title": 3, "location": 4,
         "source": 5, "url": 6, "match_score": 7, "ats_score": 8,
         "missing_skills": 9, "salary_estimate": 10, "interview_prob": 11,
         "fit_notes": 12, "priority": 13, "job_id": 14, "status": 15,
         "app_url": 16, "date_applied": 17,
+        "evidence_confidence": confidence_col,
     }
 
     unscored = []
@@ -227,7 +240,9 @@ def main():
             _, match_details = calculate_match_score(job, desc, profile, candidate, config)
             eligibility = match_details.get("eligibility", "Unverified")
             reason = match_details.get("eligibility_reason", "Eligibility not verified")
-            priority = determine_priority(None, eligibility, _high_thresh, _med_thresh)
+            confidence = match_details.get("evidence_confidence", "Low")
+            priority = determine_priority(None, eligibility, _high_thresh, _med_thresh, confidence)
+            ws.cell(row=row_idx, column=COL["evidence_confidence"], value=confidence)
             ws.cell(row=row_idx, column=COL["interview_prob"], value="Unknown")
             ws.cell(row=row_idx, column=COL["fit_notes"], value=f"Eligibility: {eligibility} — {reason} | Description unavailable; retry pending")
             ws.cell(row=row_idx, column=COL["priority"], value=priority)
@@ -242,7 +257,8 @@ def main():
 
         # Determine priority — read thresholds from config
         eligibility = match_details.get("eligibility", "Unverified")
-        priority = determine_priority(match_score, eligibility, _high_thresh, _med_thresh)
+        confidence = match_details.get("evidence_confidence", "Low")
+        priority = determine_priority(match_score, eligibility, _high_thresh, _med_thresh, confidence)
 
         # Missing skills from match details
         missing = match_details.get("missing_qualifications", [])
@@ -250,6 +266,9 @@ def main():
 
         # Build fit notes
         notes = [f"Eligibility: {eligibility} — {match_details.get('eligibility_reason', '')}"]
+        notes.append(
+            f"Evidence: {confidence} - {match_details.get('confidence_reason', '')}"
+        )
         if match_details.get("matched_domains"):
             notes.append(f"Strong: {', '.join(match_details['matched_domains'][:3])}")
         if missing:
@@ -265,6 +284,7 @@ def main():
         ws.cell(row=row_idx, column=COL["interview_prob"], value=indicator)
         ws.cell(row=row_idx, column=COL["fit_notes"], value=fit_notes)
         ws.cell(row=row_idx, column=COL["priority"], value=priority)
+        ws.cell(row=row_idx, column=COL["evidence_confidence"], value=confidence)
         ws.cell(row=row_idx, column=COL["priority"]).fill = PRIORITY_COLORS[priority]
         
         # Apply text wrapping for long-text columns

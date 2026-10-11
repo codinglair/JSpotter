@@ -165,13 +165,94 @@ class RequirementRegressionTests(unittest.TestCase):
         _, details = calculate_match_score({"title": "SDET", "location": "Remote USA"}, description, "", SDET, {})
         self.assertEqual("unknown", details["component_evidence"]["skills"]["status"])
         self.assertIn("ambiguous_skill_requirements", details["unknown"])
-        self.assertEqual(0, details["components"]["skills"])
+        self.assertIsNone(details["components"]["skills"])
 
     def test_sc06_strong_required_skill_matches_are_positive_evidence(self):
         description = "This remote role requires Java, Selenium, and JUnit experience building test automation suites."
         score, details = calculate_match_score({"title": "Senior SDET", "location": "Remote USA"}, description, "", SDET, {})
         self.assertGreaterEqual(score, 75)
         self.assertEqual(["java", "junit", "selenium"], details["verified_skill_matches"])
+
+
+class TechnicalScoringRegressionTests(unittest.TestCase):
+    def score(self, job=None, description=None, candidate=None):
+        job = job or {"title": "Senior SDET", "location": "Remote USA"}
+        description = description or (
+            "This fully remote Senior SDET role requires Java, Selenium, and JUnit "
+            "experience building reliable automated regression suites."
+        )
+        return calculate_match_score(job, description, "", candidate or SDET, {})
+
+    def test_geography_does_not_change_technical_score(self):
+        description = "Senior SDET candidates must have Java and Selenium experience building automated test suites."
+        remote, _ = self.score({"title": "Senior SDET", "location": "Remote USA"}, description)
+        distant, details = self.score({"title": "Senior SDET", "location": "Raleigh, NC"}, description)
+        self.assertEqual(remote, distant)
+        self.assertEqual("Unverified", details["eligibility"])
+
+    def test_unknown_optional_criteria_do_not_reduce_fit(self):
+        score, details = self.score(candidate=dict(SDET, seniority="senior"))
+        self.assertEqual(100, score)
+        self.assertIsNone(details["components"]["domain"])
+        self.assertIsNone(details["components"]["certifications"])
+
+    def test_unknown_seniority_does_not_reduce_fit(self):
+        score, details = self.score(
+            {"title": "SDET", "location": "Remote USA"},
+            "This fully remote SDET role requires Java, Selenium, and JUnit experience in automated testing.",
+        )
+        self.assertEqual(100, score)
+        self.assertIsNone(details["components"]["seniority"])
+
+    def test_missing_required_skill_reduces_fit(self):
+        score, details = self.score(description=(
+            "This fully remote Senior SDET role requires Java, Selenium, JUnit, and C# "
+            "experience building automated regression suites."
+        ))
+        self.assertLess(score, 100)
+        self.assertIn("c#", details["missing_qualifications"])
+
+    def test_ambiguous_skills_reduce_confidence_not_score(self):
+        base, base_details = self.score()
+        ambiguous, details = self.score(description=(
+            "This fully remote Senior SDET role requires Java, Selenium, and JUnit experience. "
+            "Docker supports the team's automated regression environment."
+        ))
+        self.assertEqual(base, ambiguous)
+        self.assertIn("docker", details["ambiguous_requirements"])
+        self.assertNotEqual(base_details["evidence_confidence"], details["evidence_confidence"])
+
+    def test_no_applicable_criteria_returns_unknown_score(self):
+        candidate = {"skills": [], "preferred_roles": [], "locations": SDET["locations"]}
+        score, details = self.score(
+            {"title": "Engineering Opportunity", "location": "Remote USA"},
+            "Join our fully remote engineering organization and collaborate with several product teams.",
+            candidate,
+        )
+        self.assertIsNone(score)
+        self.assertEqual("Low", details["evidence_confidence"])
+
+    def test_confidence_and_eligibility_gate_priority(self):
+        from run_scoring import determine_priority
+        self.assertEqual("Review", determine_priority(100, "Eligible", confidence="Low"))
+        self.assertEqual("High", determine_priority(100, "Eligible", confidence="High"))
+        self.assertEqual("Review", determine_priority(100, "Unverified", confidence="High"))
+        self.assertEqual("Ineligible", determine_priority(100, "Ineligible", confidence="High"))
+
+    def test_strong_explicit_evidence_is_high_confidence_and_high_priority(self):
+        from run_scoring import determine_priority
+        candidate = dict(SDET, seniority="senior")
+        score, details = self.score(candidate=candidate)
+        self.assertEqual("High", details["evidence_confidence"])
+        self.assertEqual("High", determine_priority(score, "Eligible", confidence=details["evidence_confidence"]))
+
+    def test_candidate_skills_do_not_expand_requirement_vocabulary(self):
+        requirements = identify_skill_requirements(
+            "Candidates must have ObscureTool experience in a demanding automation role.",
+            {},
+            {"skills": ["ObscureTool"]},
+        )
+        self.assertEqual([], requirements["required"])
 
 
 class ValidationAndSafetyTests(unittest.TestCase):
@@ -291,6 +372,9 @@ class WorkflowTests(unittest.TestCase):
             url = "https://example/jobs/987"
             add_jobs([{"title": "Senior SDET", "company": "Acme", "location": "Remote USA", "url": url}], journal)
             workbook = load_workbook(journal)
+            workbook["Jobs"].cell(2, 15, "Applied")
+            workbook["Jobs"].cell(2, 17, "2026-01-02")
+            workbook["Jobs"].delete_cols(18)  # simulate a journal created before confidence existed
             workbook["Applications"].append(["2026-01-01", "Existing Co", "Existing Role", "2026-01-02", "v1", "No", "Applied"])
             workbook.save(journal)
             description = "Senior SDET role requiring Java Selenium and JUnit for reliable automated regression suites."
@@ -304,6 +388,10 @@ class WorkflowTests(unittest.TestCase):
             self.assertIsInstance(row[6], int)
             self.assertIn(row[10], {"Strong", "Moderate", "Weak"})
             self.assertEqual(2, workbook["Jobs"].max_row)
+            self.assertEqual("Applied", row[14])
+            self.assertEqual("2026-01-02", row[16])
+            self.assertEqual("Evidence Confidence", workbook["Jobs"].cell(1, 18).value)
+            self.assertIn(row[17], {"High", "Medium", "Low"})
             self.assertEqual("Existing Co", workbook["Applications"].cell(2, 2).value)
             self.assertEqual("Applied", workbook["Applications"].cell(2, 7).value)
 

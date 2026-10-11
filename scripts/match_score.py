@@ -82,11 +82,11 @@ def _canonical_skill(value):
     return value
 
 
-def _skill_vocabulary(config, candidate):
+def _skill_vocabulary(config):
+    """Return job-requirement vocabulary independent of candidate skills."""
     configured = _terms(config.get("scoring", {}).get("skill_vocabulary"))
-    candidate_terms = _terms(candidate.get("skills"))
     vocabulary = dict(TECHNICAL_SKILLS)
-    for term in configured | candidate_terms:
+    for term in configured:
         canonical = _canonical_skill(term)
         vocabulary.setdefault(canonical, tuple())
         vocabulary[canonical] = tuple(set(vocabulary[canonical]) | {term, canonical})
@@ -98,7 +98,7 @@ def identify_skill_requirements(description, config=None, candidate=None):
     config = config or {}
     candidate = candidate or {}
     mandatory, preferred, ambiguous = set(), set(), set()
-    vocabulary = _skill_vocabulary(config, candidate)
+    vocabulary = _skill_vocabulary(config)
     clauses = re.split(r"(?<=[.;!?])\s+|[\r\n]+|\s+[•|]\s+", description or "")
 
     for clause in clauses:
@@ -228,6 +228,8 @@ def calculate_match_score(job, description, profile_text="", candidate=None, con
     if not description or len(description.strip()) < 50:
         return None, {
             "fit_indicator": "Unknown",
+            "evidence_confidence": "Low",
+            "confidence_reason": "Description is unavailable or too short for a technical assessment",
             "reason": "Job description unavailable",
             "eligibility": eligibility,
             "eligibility_reason": eligibility_reason,
@@ -272,10 +274,11 @@ def calculate_match_score(job, description, profile_text="", candidate=None, con
     domain_matches = sorted(required_domains & domains)
     missing_domains = sorted(required_domains - domains)
 
+    weights = {"skills": 50, "role": 15, "seniority": 5, "domain": 15, "certifications": 5}
     components = {}
     evidence = {}
     if required_skills:
-        components["skills"] = round(50 * len(skill_matches) / len(required_skills))
+        components["skills"] = 50 * len(skill_matches) / len(required_skills)
         evidence["skills"] = {
             "status": "verified",
             "source": skill_source,
@@ -285,10 +288,10 @@ def calculate_match_score(job, description, profile_text="", candidate=None, con
             "preferred": sorted(preferred_skills),
         }
     elif job.get("skills_not_required") is True:
-        components["skills"] = 50
+        components["skills"] = None
         evidence["skills"] = {"status": "not_applicable", "required": []}
     else:
-        components["skills"] = 0
+        components["skills"] = None
         evidence["skills"] = {
             "status": "unknown",
             "required": [],
@@ -297,7 +300,7 @@ def calculate_match_score(job, description, profile_text="", candidate=None, con
         }
 
     role_match = any(role in title for role in preferred_roles) if preferred_roles else None
-    components["role"] = 15 if role_match else (3 if role_match is False else 0)
+    components["role"] = 15 if role_match else (0 if role_match is False else None)
     evidence["role"] = {"status": "verified" if role_match is not None else "unknown", "matched": bool(role_match)}
 
     levels = {"entry": 0, "junior": 0, "mid": 1, "senior": 2, "lead": 3, "principal": 3}
@@ -310,7 +313,7 @@ def calculate_match_score(job, description, profile_text="", candidate=None, con
         )
     required_rank = levels.get(str(required_level).lower()) if required_level else None
     if required_rank is None:
-        components["seniority"] = 0
+        components["seniority"] = None
         evidence["seniority"] = {"status": "unknown", "required": None}
     else:
         matched = candidate_level is not None and candidate_level >= required_rank
@@ -318,38 +321,67 @@ def calculate_match_score(job, description, profile_text="", candidate=None, con
         evidence["seniority"] = {"status": "verified", "required": required_level, "matched": matched}
 
     if required_domains:
-        components["domain"] = round(15 * len(domain_matches) / len(required_domains))
+        components["domain"] = 15 * len(domain_matches) / len(required_domains)
         evidence["domain"] = {"status": "verified", "required": sorted(required_domains), "matched": domain_matches, "missing": missing_domains}
     elif job.get("domains_not_required") is True:
-        components["domain"] = 15
+        components["domain"] = None
         evidence["domain"] = {"status": "not_applicable", "required": []}
     else:
-        components["domain"] = 0
+        components["domain"] = None
         evidence["domain"] = {"status": "unknown", "required": []}
 
-    components["location"] = 10 if eligibility == "Eligible" else 0
-    evidence["location"] = {"status": eligibility.lower(), "reason": eligibility_reason}
-
     if required_certs:
-        components["certifications"] = round(5 * len(cert_matches) / len(required_certs))
+        components["certifications"] = 5 * len(cert_matches) / len(required_certs)
         evidence["certifications"] = {"status": "verified", "required": sorted(required_certs), "matched": cert_matches, "missing": missing_certs}
     elif job.get("certifications_not_required") is True:
-        components["certifications"] = 5
+        components["certifications"] = None
         evidence["certifications"] = {"status": "not_applicable", "required": []}
     else:
-        components["certifications"] = 0
+        components["certifications"] = None
         evidence["certifications"] = {"status": "unknown", "required": []}
 
-    score = max(0, min(100, int(sum(components.values()))))
-    indicator = "Strong" if score >= 75 else "Moderate" if score >= 50 else "Weak"
+    applicable = [name for name, points in components.items() if points is not None]
+    maximum_applicable = sum(weights[name] for name in applicable)
+    score = (
+        max(0, min(100, round(100 * sum(components[name] for name in applicable) / maximum_applicable)))
+        if maximum_applicable else None
+    )
+    indicator = (
+        "Unknown" if score is None else
+        "Strong" if score >= 75 else "Moderate" if score >= 50 else "Weak"
+    )
     unknown = [
         name for name, item in evidence.items() if item.get("status") == "unknown"
     ]
     if ambiguous_skills:
         unknown.append("ambiguous_skill_requirements")
 
+    # Evidence completeness is independent of geographic eligibility.
+    evidence_points = (
+        (2 if evidence["skills"]["status"] == "verified" else 0)
+        + (1 if evidence["role"]["status"] == "verified" else 0)
+        + (1 if evidence["seniority"]["status"] == "verified" else 0)
+        + (1 if evidence["domain"]["status"] == "verified" else 0)
+        + (1 if evidence["certifications"]["status"] == "verified" else 0)
+    )
+    if score is None or evidence_points < 2:
+        confidence = "Low"
+    elif evidence_points >= 4 and evidence["skills"]["status"] == "verified":
+        confidence = "High"
+    else:
+        confidence = "Medium"
+    if ambiguous_skills:
+        confidence = {"High": "Medium", "Medium": "Low", "Low": "Low"}[confidence]
+    confidence_reason = (
+        f"{len(applicable)} applicable criteria; evidence points {evidence_points}/6"
+        + (f"; {len(ambiguous_skills)} ambiguous skill requirement(s)" if ambiguous_skills else "")
+    )
+
     return score, {
         "fit_indicator": indicator,
+        "evidence_confidence": confidence,
+        "confidence_reason": confidence_reason,
+        "maximum_applicable_points": maximum_applicable,
         "components": components,
         "component_evidence": evidence,
         "eligibility": eligibility,

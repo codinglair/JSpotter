@@ -55,6 +55,7 @@ JOBS_COLUMNS = [
     ("status", "Status", 16),
     ("app_url", "App URL", 45),
     ("date_applied", "Date Applied", 12),
+    ("evidence_confidence", "Evidence Confidence", 20),
 ]
 
 APPLICATIONS_COLUMNS = [
@@ -226,6 +227,11 @@ def add_jobs(jobs_data, path=JOURNAL_PATH, mode="append"):
 
     wb = load_workbook(str(path))
     ws = wb["Jobs"]
+
+    # Idempotently evolve legacy journals without shifting operational fields.
+    headers = {str(cell.value or "").strip() for cell in ws[1]}
+    if "Evidence Confidence" not in headers:
+        ws.cell(1, ws.max_column + 1, "Evidence Confidence")
 
     # Get existing entries for dedup
     url_col = _find_col_by_key(JOBS_COLUMNS, "url")

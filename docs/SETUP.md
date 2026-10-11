@@ -66,7 +66,7 @@ To safely recalculate existing rows after changing profile constraints or scorin
 py .\scripts\run_scoring.py --profile-dir .\profiles\sdet --rescore
 ```
 
-This updates scoring fields on existing job rows without adding jobs or changing the Applications sheet. `Review` and `Ineligible` are deliberately non-actionable priorities.
+This updates scoring fields on existing job rows without adding jobs or changing application status/history. Older journals receive an appended `Evidence Confidence` column; the migration is safe to run repeatedly. `Review` and `Ineligible` are deliberately non-actionable priorities.
 
 ## Resume validation and generation
 
