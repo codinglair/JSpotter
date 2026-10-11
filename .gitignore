@@ -6,6 +6,12 @@ output/
 *.env
 config.json
 
+# Synthetic, non-private example profiles are intentionally tracked
+!profiles/
+!profiles/*.example/
+!profiles/*.example/config.json
+!profiles/*.example/MASTER_PROFILE.md
+
 # Python
 __pycache__/
 *.pyc

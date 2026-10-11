@@ -6,12 +6,14 @@ Only adapts summary, strengths, and title. Bullets stay identical.
 Saves ~50% tokens vs full generation for paired roles at the same company.
 
 Usage:
-  python3 adapt_resume.py output/tailoring_voya_senior_v2.json "Lead AI Product Manager" "https://www.linkedin.com/jobs/view/lead-ai-product-manager-at-voya-financial-4431725677" output/tailoring_voya_lead_v3.json
+  python3 adapt_resume.py output/base.json "Senior Software Engineer" "https://example.com/job/123" output/adapted.json
 """
 
 import json
 import sys
+import argparse
 from pathlib import Path
+from profile_support import add_profile_argument, configured_path, load_profile_config, safe_output_path
 
 
 def build_adapt_prompt(base_path, new_title, new_url, output_path, descs_cache_path='output/descriptions_cache.json'):
@@ -76,22 +78,26 @@ Keep all bullets, highlights structure, tools, and career order identical to the
 
 
 def main():
-    if len(sys.argv) < 5:
-        print("Usage: python3 adapt_resume.py <base_resume.json> <new_title> <new_url> <output_path>")
-        print()
-        print("Example:")
-        print("  python3 adapt_resume.py output/tailoring_voya_senior_v2.json 'Lead AI Product Manager' 'https://linkedin.com/jobs/view/...' output/tailoring_voya_lead_v3.json")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description="Build a same-company resume adaptation prompt")
+    parser.add_argument("base_resume")
+    parser.add_argument("new_title")
+    parser.add_argument("new_url")
+    parser.add_argument("output_name", help="Filename under the selected profile output directory")
+    add_profile_argument(parser)
+    parser.add_argument("--overwrite", action="store_true")
+    args = parser.parse_args()
+    selected_dir, config = load_profile_config(args.profile_dir)
+    output_dir = configured_path(selected_dir, config, "output", "output")
+    output_path = safe_output_path(output_dir / Path(args.output_name).name, args.overwrite)
+    desc_path = output_dir / "descriptions_cache.json"
+    base_path = args.base_resume
+    new_title = args.new_title
+    new_url = args.new_url
     
-    base_path = sys.argv[1]
-    new_title = sys.argv[2]
-    new_url = sys.argv[3]
-    output_path = sys.argv[4]
+    prompt = build_adapt_prompt(base_path, new_title, new_url, output_path, desc_path)
     
-    prompt = build_adapt_prompt(base_path, new_title, new_url, output_path)
-    
-    prompt_path = Path('output/adapt_prompt.txt')
-    prompt_path.write_text(prompt)
+    prompt_path = safe_output_path(output_dir / 'adapt_prompt.txt', args.overwrite)
+    prompt_path.write_text(prompt, encoding="utf-8")
     
     print(f"Adaptation prompt generated")
     print(f"Base: {base_path}")

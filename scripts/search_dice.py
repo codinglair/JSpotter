@@ -2,17 +2,17 @@
 """
 Dice.com Jobs Search Pipeline — browser-based, login required.
 
-Searches Dice.com for PM roles in two modes:
-  1. Greater Boston (local)
+Searches Dice.com for configured roles in two modes:
+  1. Configured local searches
   2. Remote in USA
 
 Extracts job listings via JavaScript, outputs CSV + Markdown + JSON.
 
 Usage:
   python3 search_dice.py              # print search URLs + JS for browser extraction
-  python3 search_dice.py --boston     # Boston only
+  python3 search_dice.py --local      # configured local only
   python3 search_dice.py --remote     # Remote only
-  python3 search_dice.py --keywords "principal product manager AI"
+  python3 search_dice.py --keywords "senior java engineer"
   python3 search_dice.py --input output/dice_extract.json   # process extracted jobs
 """
 
@@ -23,10 +23,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-BASE_DIR = Path(__file__).parent
-OUTPUT_DIR = BASE_DIR / "output"
-OUTPUT_DIR.mkdir(exist_ok=True)
-CONFIG_PATH = BASE_DIR / "config.json"
+from profile_support import add_profile_argument, configured_path, load_profile_config, safe_output_path
 
 # Dice search URL template
 DICE_SEARCH = "https://www.dice.com/jobs?q={keywords}&location={location}"
@@ -86,13 +83,12 @@ APPLY_EXTRACT_JS = r"""
 """
 
 
-def load_config():
+def load_config(selected_profile=None):
     """Load search config from config.json."""
-    with open(CONFIG_PATH) as f:
-        return json.load(f)
+    return load_profile_config(selected_profile)
 
 
-def build_search_urls(config, keywords, boston=True, remote=True):
+def build_search_urls(config, keywords, local=True, remote=True, **legacy):
     """Build Dice search URLs from config locations."""
     from urllib.parse import quote
     kw = quote(keywords)
@@ -105,12 +101,12 @@ def build_search_urls(config, keywords, boston=True, remote=True):
 
         if is_remote and not remote:
             continue
-        if not is_remote and not boston:
+        if not is_remote and not local:
             continue
 
         loc_encoded = quote(location_str)
         urls.append({
-            "mode": "remote" if is_remote else "boston",
+            "mode": "remote" if is_remote else "local",
             "name": name,
             "url": DICE_SEARCH.format(keywords=kw, location=loc_encoded)
         })
@@ -144,44 +140,51 @@ def is_job_board(url, config):
 
 
 def filter_by_keywords(jobs, config):
-    """Keep product management roles based on config title_filter_terms."""
-    terms = config.get("search", {}).get("title_filter_terms")
-    if not terms:
-        raise ValueError("search.title_filter_terms not found in config.json")
+    """Keep complete listings matching configured title rules."""
+    search = config.get("search", {})
+    include = [str(term).lower() for term in search.get("title_include", search.get("title_filter_terms", []))]
+    exclude = [str(term).lower() for term in search.get("title_exclude", [])]
     filtered = []
     for j in jobs:
-        title_lower = j.get("title", "").lower()
-        if "product" in title_lower and any(term in title_lower for term in terms):
+        if not isinstance(j, dict):
+            continue
+        title_lower = str(j.get("title") or "").strip().lower()
+        url = str(j.get("url") or "").strip()
+        if title_lower and url and (not include or any(t in title_lower for t in include)) and not any(t in title_lower for t in exclude):
             filtered.append(j)
     return filtered
 
 
-def save_raw_json(jobs, date_str):
+def save_raw_json(jobs, date_str, output_dir, overwrite=False):
     """Save raw JSON for downstream processing (scoring, journal, etc)."""
-    filename = OUTPUT_DIR / "dice_extract.json"
+    filename = safe_output_path(output_dir / "dice_extract.json", overwrite)
     with open(filename, "w") as f:
         json.dump(jobs, f, indent=2)
     return filename
 
 
 def main():
-    config = load_config()
-
-    search_config = config.get("search", {})
-    if not search_config.get("keywords"):
-        print("ERROR: search.keywords not found in config.json")
-        sys.exit(1)
-
     parser = argparse.ArgumentParser(description="Dice.com Jobs Search Pipeline")
-    parser.add_argument("--keywords", default=search_config["keywords"], help="Search keywords")
-    parser.add_argument("--boston", action="store_true", help="Search Greater Boston")
+    add_profile_argument(parser)
+    parser.add_argument("--keywords", help="Override configured search keywords")
+    parser.add_argument("--local", action="store_true", help="Search configured local locations")
+    parser.add_argument("--boston", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--remote", action="store_true", help="Search Remote USA")
     parser.add_argument("--input", help="Read pre-extracted jobs from JSON file instead of browser")
+    parser.add_argument("--overwrite", action="store_true", help="Replace the filtered Dice output")
     args = parser.parse_args()
+    selected_dir, config = load_config(args.profile_dir)
+    search_config = config.get("search", {})
+    keywords = args.keywords or search_config.get("keywords")
+    if not keywords:
+        parser.error("search.keywords is required in the selected profile")
+    output_dir = configured_path(selected_dir, config, "output", "output")
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     # If neither flag set, search both
-    search_boston = args.boston or (not args.boston and not args.remote)
-    search_remote = args.remote or (not args.boston and not args.remote)
+    explicit_local = args.local or args.boston
+    search_local = explicit_local or (not explicit_local and not args.remote)
+    search_remote = args.remote or (not explicit_local and not args.remote)
 
     date_str = datetime.now().strftime("%Y-%m-%d")
 
@@ -192,7 +195,7 @@ def main():
         print(f"Loaded {len(jobs)} jobs from {args.input}")
     else:
         # Print search URLs for the agent to navigate to
-        urls = build_search_urls(config, args.keywords, boston=search_boston, remote=search_remote)
+        urls = build_search_urls(config, keywords, local=search_local, remote=search_remote)
         print("SEARCH_URLS:")
         for u in urls:
             print(f"  {u['mode']}: {u['url']}")
@@ -224,6 +227,7 @@ def main():
     # Process extracted jobs
     jobs = dedupe_jobs(jobs)
     jobs = filter_by_keywords(jobs, config)
+    jobs = jobs[:int(search_config.get("max_results_per_search", len(jobs) or 0))]
 
     # Filter out jobs where apply URL goes to another job board
     filtered = []
@@ -237,7 +241,7 @@ def main():
 
     print(f"After dedup + filter: {len(jobs)} jobs")
 
-    json_path = save_raw_json(jobs, date_str)
+    json_path = save_raw_json(jobs, date_str, output_dir, args.overwrite)
 
     print(f"\nSaved:")
     print(f"  JSON: {json_path}")

@@ -25,14 +25,15 @@ CRITICAL STRUCTURE RULES:
 2. Career order: Most recent first. Follow the career_order array in config.json.
 2b. Education/bridge entries must be ONE bullet only, factual. Do NOT invent additional bullets about data systems, architecture, analytics, or coursework. Bridge entries are not work experience.
 3. No sole proprietor / entrepreneur / side-project entries unless explicitly requested.
-4. Strength labels: 2-4 words, simple (e.g. "Product management", not "AI/ML Product Strategy Portfolio Leadership").
+4. Strength labels: 2-4 words and grounded in the candidate profile.
 5. Summary: 2-3 sentences, plain factual tone.
 7. NO pandering ("directly relevant to...", "well-suited for this role", "applicable to").
 8. NO client-name prefixes ("[CLIENT] [PRODUCT]:") — weave client names naturally.
 8b. In the professional summary, do NOT phrase client work as direct employment. Use "for a [client] engagement" or "at a leading [industry] chain" instead of "at [CLIENT]" — which reads as direct employment. The career highlights section shows the employer; the summary should not contradict that.
 8c. NEVER conflate metrics or facts from different engagements in the summary or bullets. Each metric belongs to a specific engagement. Do not merge metrics, tools, or domains from different engagements into a single claim. If referencing a metric in the summary, it must be traceable to the correct engagement.
 9. Use the candidate's preferred name (see config.json).
-10. Only real experience from the profile — never conflate metrics from one engagement with another. Metrics belong to the engagement they describe. Never rephrase or rename a product/platform to make it sound more relevant to the target job. Describe what it IS, not what sounds good. Job titles MUST match the master profile exactly — never inflate, never change. Dates MUST match the master profile exactly — never change end dates to "Present" or vice versa. Background checks will surface any discrepancy.
+10. Only real experience from the profile. Never conflate metrics, rename work, inflate titles, or change dates.
+11. Include `claimed_qualifications` as a JSON array. Every item must appear in the structured candidate profile.
 11. Tools section: Include ONLY tool categories relevant to the specific job. Drop categories that have no overlap with job requirements. Return as JSON dict (NOT list), no markdown asterisks.
 12. Include dates on all highlight headers. NEVER append project tenure dates to individual bullets (e.g., "(Mon YYYY–Mon YYYY)"). Dates belong in headers only.
 13. Use read_file and write_file tools for reading/writing JSON files. Do NOT write or execute custom Python scripts (no `python3 -c`, no .py files, no temp scripts, no execute_code). Use ONLY read_file, write_file, and search_files for all file operations. Pipeline scripts (quality_gate.py, generate_pdf.py, etc.) are run by the parent agent, not by you.

@@ -20,6 +20,7 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
+from profile_support import configured_path, load_profile_config
 
 try:
     from openpyxl import Workbook, load_workbook
@@ -46,7 +47,7 @@ JOBS_COLUMNS = [
     ("ats_score", "ATS Score", 12),
     ("missing_skills", "Missing Skills", 30),
     ("salary_estimate", "Salary Estimate", 16),
-    ("interview_prob", "Interview Probability", 18),
+    ("interview_prob", "Fit Indicator", 18),
     ("fit_notes", "Fit Notes", 40),
     ("priority", "Priority", 10),
 
@@ -128,8 +129,12 @@ SCORE_COLORS = {
 }
 
 
-def init_journal(path=JOURNAL_PATH):
+def init_journal(path=JOURNAL_PATH, overwrite=False):
     """Create a fresh journal with all three sheets."""
+    path = Path(path)
+    if path.exists() and not overwrite:
+        raise FileExistsError(f"Refusing to overwrite existing journal: {path}")
+    path.parent.mkdir(parents=True, exist_ok=True)
     wb = Workbook()
 
     # ── Sheet 1: Jobs ──
@@ -170,8 +175,8 @@ def init_journal(path=JOURNAL_PATH):
         ["Low", "Possible match, monitor"],
         ["", ""],
         ["Search Mode (Jobs sheet)", ""],
-        ["boston", "Found via Greater Boston LinkedIn search"],
-        ["remote", "Found via Remote USA LinkedIn search"],
+        ["local", "Found via a configured local search"],
+        ["remote", "Found via a configured remote search"],
         ["greenhouse", "Found via Greenhouse ATS API"],
         ["lever", "Found via Lever ATS API"],
         ["ashby", "Found via Ashby ATS API"],
@@ -474,12 +479,18 @@ def main():
     parser.add_argument("--add", help="Add jobs from JSON file")
     parser.add_argument("--status", action="store_true", help="Show summary stats")
     parser.add_argument("--path", default=str(JOURNAL_PATH), help="Journal file path")
+    parser.add_argument("--profile-dir", help="Directory containing profile config and journal")
+    parser.add_argument("--force", action="store_true", help="Allow --init to replace an existing journal")
     args = parser.parse_args()
 
-    path = Path(args.path)
+    if args.profile_dir:
+        selected_dir, config = load_profile_config(args.profile_dir)
+        path = configured_path(selected_dir, config, "journal", "journal.xlsx")
+    else:
+        path = Path(args.path)
 
     if args.init:
-        init_journal(path)
+        init_journal(path, overwrite=args.force)
     elif args.add:
         with open(args.add) as f:
             jobs = json.load(f)

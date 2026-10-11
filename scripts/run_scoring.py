@@ -11,6 +11,7 @@ Usage:
 """
 
 import json
+import argparse
 import re
 import subprocess
 import sys
@@ -35,7 +36,8 @@ DESCS_DIR = BASE_DIR / "output"
 sys.path.insert(0, str(BASE_DIR))
 from ats_score import calculate_ats_score
 from match_score import calculate_match_score
-from interview_prob import calculate_interview_prob
+from interview_prob import calculate_fit_indicator
+from profile_support import add_profile_argument, configured_path, load_profile_config
 
 PRIORITY_COLORS = {
     'High': PatternFill(start_color='FFD7D7', end_color='FFD7D7', fill_type='solid'),
@@ -91,13 +93,23 @@ def fetch_job_description(url, timeout=20):
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Score unscored jobs for a selected candidate profile")
+    add_profile_argument(parser)
+    args = parser.parse_args()
+    selected_dir, config = load_profile_config(args.profile_dir)
+    candidate = config.get("candidate", {})
+    journal = configured_path(selected_dir, config, "journal", "journal.xlsx")
+    profile_path = configured_path(selected_dir, config, "master_profile", "MASTER_PROFILE.md")
+    descs_dir = configured_path(selected_dir, config, "output", "output")
+    descs_dir.mkdir(parents=True, exist_ok=True)
+
     # Load profile
-    with open(PROFILE_PATH) as f:
+    with open(profile_path, encoding="utf-8") as f:
         profile = f.read()
     profile_lower = profile.lower()
 
     # Load existing descriptions cache
-    desc_path = DESCS_DIR / "descriptions_cache.json"
+    desc_path = descs_dir / "descriptions_cache.json"
     descriptions = {}
     if desc_path.exists():
         with open(desc_path) as f:
@@ -105,7 +117,7 @@ def main():
     print(f"Loaded {len(descriptions)} cached descriptions")
 
     # Load journal and find unscored jobs
-    wb = load_workbook(str(JOURNAL))
+    wb = load_workbook(str(journal))
     ws = wb["Jobs"]
 
     COL = {
@@ -180,35 +192,26 @@ def main():
     # Score each unscored job
     print(f"\nScoring {len(unscored)} jobs...")
     scored = 0
+    _high_thresh = config.get("scoring", {}).get("priority_thresholds", {}).get("high", 75)
+    _med_thresh = config.get("scoring", {}).get("priority_thresholds", {}).get("medium", 50)
     for job in unscored:
         desc = descriptions.get(job["url"], "")
         row_idx = job["row"]
 
         if not desc or len(desc) < 50:
             # Can't score without description
-            ws.cell(row=row_idx, column=COL["match_score"], value=0)
-            ws.cell(row=row_idx, column=COL["ats_score"], value=0)
-            ws.cell(row=row_idx, column=COL["interview_prob"], value="5%")
-            ws.cell(row=row_idx, column=COL["priority"], value="Low")
-            ws.cell(row=row_idx, column=COL["priority"]).fill = PRIORITY_COLORS["Low"]
-            ws.cell(row=row_idx, column=COL["fit_notes"], value="No description available")
+            # Leave score fields empty so a later run retries the fetch.
+            ws.cell(row=row_idx, column=COL["interview_prob"], value="Unknown")
+            ws.cell(row=row_idx, column=COL["fit_notes"], value="Description unavailable; retry pending")
             continue
 
         # Calculate all scores
-        ats_score, ats_details = calculate_ats_score(desc, profile)
-        match_score, match_details = calculate_match_score(job, desc, profile)
-        prob = calculate_interview_prob(match_score, ats_score, job["title"], desc, job["location"])
+        vocabulary = config.get("scoring", {}).get("skill_vocabulary")
+        ats_score, ats_details = calculate_ats_score(desc, profile, candidate, vocabulary)
+        match_score, match_details = calculate_match_score(job, desc, profile, candidate, config)
+        indicator = calculate_fit_indicator(match_score, match_details)
 
         # Determine priority — read thresholds from config
-        import json as _json
-        try:
-            with open("config.json") as _f:
-                _cfg = _json.load(_f)
-            _high_thresh = _cfg.get("scoring", {}).get("priority_thresholds", {}).get("high", 80)
-            _med_thresh = _cfg.get("scoring", {}).get("priority_thresholds", {}).get("medium", 65)
-        except:
-            _high_thresh, _med_thresh = 80, 65
-
         if match_score >= _high_thresh:
             priority = "High"
         elif match_score >= _med_thresh:
@@ -217,7 +220,7 @@ def main():
             priority = "Low"
 
         # Missing skills from match details
-        missing = match_details.get("missing_domains", [])
+        missing = match_details.get("missing_qualifications", [])
         missing_str = ", ".join(missing) if missing else ""
 
         # Build fit notes
@@ -227,14 +230,14 @@ def main():
         if missing:
             notes.append(f"Gap: {', '.join(missing[:2])}")
         if not notes:
-            notes.append("General PM fit")
+            notes.append("No configured skill evidence detected")
         fit_notes = " | ".join(notes)
 
         # Write to journal
         ws.cell(row=row_idx, column=COL["match_score"], value=match_score)
-        ws.cell(row=row_idx, column=COL["ats_score"], value=ats_score)
+        ws.cell(row=row_idx, column=COL["ats_score"], value=ats_score if ats_score is not None else "Unknown")
         ws.cell(row=row_idx, column=COL["missing_skills"], value=missing_str)
-        ws.cell(row=row_idx, column=COL["interview_prob"], value=f"{prob}%")
+        ws.cell(row=row_idx, column=COL["interview_prob"], value=indicator)
         ws.cell(row=row_idx, column=COL["fit_notes"], value=fit_notes)
         ws.cell(row=row_idx, column=COL["priority"], value=priority)
         ws.cell(row=row_idx, column=COL["priority"]).fill = PRIORITY_COLORS[priority]
@@ -250,7 +253,8 @@ def main():
             ws.cell(row=row_idx, column=COL["status"], value="Not Applied")
 
         scored += 1
-        print(f"  {job['company'][:20]:<20} match={match_score:>3} ats={ats_score:>3} prob={prob:>2}%  {priority:<7} {job['title'][:30]}")
+        ats_display = ats_score if ats_score is not None else "N/A"
+        print(f"  {job['company'][:20]:<20} match={match_score:>3} ats={str(ats_display):>3} fit={indicator:<8} {priority:<7} {job['title'][:30]}")
 
     # Ensure auto-filters on all sheets
     from openpyxl.utils import get_column_letter
@@ -285,7 +289,7 @@ def main():
         elif 'not applied' in status or status == '':
             company_cell.fill = yellow_fill
     
-    wb.save(str(JOURNAL))
+    wb.save(str(journal))
     print(f"Scored {scored} jobs. Journal updated.")
 
     # Summary
@@ -294,9 +298,9 @@ def main():
     for job in unscored:
         desc = descriptions.get(job["url"], "")
         if not desc or len(desc) < 50:
-            priorities["Low"] += 1
+            priorities["Unknown"] += 1
             continue
-        ms, _ = calculate_match_score(job, desc, profile)
+        ms, _ = calculate_match_score(job, desc, profile, candidate, config)
         if ms >= _high_thresh:
             priorities["High"] += 1
         elif ms >= _med_thresh:
@@ -304,7 +308,7 @@ def main():
         else:
             priorities["Low"] += 1
 
-    print(f"\nNew jobs priority: High={priorities['High']} Medium={priorities['Medium']} Low={priorities['Low']}")
+    print(f"\nNew jobs priority: High={priorities['High']} Medium={priorities['Medium']} Low={priorities['Low']} Unknown={priorities['Unknown']}")
 
 
 if __name__ == "__main__":

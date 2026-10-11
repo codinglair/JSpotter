@@ -10,12 +10,15 @@ Usage:
 
 import json
 import sys
+import argparse
+from datetime import datetime
 from pathlib import Path
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.lib.colors import HexColor
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, ListFlowable, ListItem, HRFlowable, Table, TableStyle
+from profile_support import add_profile_argument, configured_path, load_profile_config, safe_output_path
 
 BASE_DIR = Path(__file__).parent
 OUTPUT_DIR = BASE_DIR / "resume" / "tailored"
@@ -34,8 +37,8 @@ CANDIDATE_NAME = CANDIDATE.get("name", "")
 CAREER_ORDER = CANDIDATE.get("career_order", [])
 
 # Load theme
-def load_theme():
-    theme_path = BASE_DIR / "theme.json"
+def load_theme(directory=None):
+    theme_path = Path(directory or BASE_DIR) / "theme.json"
     if theme_path.exists():
         with open(theme_path) as f:
             return json.load(f)
@@ -112,6 +115,26 @@ bullet_style = ParagraphStyle('Bullet', parent=styles['Normal'],
 strength_style = ParagraphStyle('Strength', parent=styles['Normal'],
     fontName=T_FONTS["bullet"]["family"], fontSize=T_FONTS["bullet"]["size"], textColor=BODY_COLOR,
     leftIndent=10, bulletIndent=0, leading=T_FONTS["bullet"]["size"] + 3, spaceAfter=1)
+
+
+def configure_theme(theme):
+    """Apply a selected profile's theme to subsequent PDF generation."""
+    global THEME, T_FONTS, T_COLORS, T_LAYOUT, T_STRENGTHS, T_BULLETS, T_CONTACT
+    global DARK, GRAY, LIGHT_GRAY, BODY_COLOR
+    global name_style, subtitle_style, section_style, body_style, job_header_style, bullet_style, strength_style
+    THEME = theme
+    T_FONTS, T_COLORS, T_LAYOUT = theme["fonts"], theme["colors"], theme["layout"]
+    T_STRENGTHS, T_BULLETS, T_CONTACT = theme["strengths"], theme["bullets"], theme["contact_info"]
+    DARK, GRAY = HexColor(T_COLORS["name"]), HexColor(T_COLORS["subtitle"])
+    LIGHT_GRAY, BODY_COLOR = HexColor(T_COLORS["rule_section"]), HexColor(T_COLORS["body"])
+    normal = getSampleStyleSheet()["Normal"]
+    name_style = ParagraphStyle('ProfileName', parent=normal, fontName=T_FONTS["name"]["family"], fontSize=T_FONTS["name"]["size"], textColor=DARK, spaceAfter=2, leading=T_FONTS["name"]["size"] + 4)
+    subtitle_style = ParagraphStyle('ProfileSubtitle', parent=normal, fontName=T_FONTS["subtitle"]["family"], fontSize=T_FONTS["subtitle"]["size"], textColor=GRAY, spaceAfter=10, leading=T_FONTS["subtitle"]["size"] + 3)
+    section_style = ParagraphStyle('ProfileSection', parent=normal, fontName=T_FONTS["section_header"]["family"], fontSize=T_FONTS["section_header"]["size"], textColor=HexColor(T_COLORS["section_header"]), spaceBefore=T_LAYOUT["section_space_before"], spaceAfter=T_LAYOUT["section_space_after"], leading=T_FONTS["section_header"]["size"] + 3)
+    body_style = ParagraphStyle('ProfileBody', parent=normal, fontName=T_FONTS["body"]["family"], fontSize=T_FONTS["body"]["size"], textColor=BODY_COLOR, leading=T_FONTS["body"]["size"] + 3)
+    job_header_style = ParagraphStyle('ProfileJobHeader', parent=normal, fontName=T_FONTS["job_header"]["family"], fontSize=T_FONTS["job_header"]["size"], textColor=HexColor(T_COLORS["job_header"]), spaceBefore=4, spaceAfter=2, leading=T_FONTS["job_header"]["size"] + 3)
+    bullet_style = ParagraphStyle('ProfileBullet', parent=normal, fontName=T_FONTS["bullet"]["family"], fontSize=T_FONTS["bullet"]["size"], textColor=BODY_COLOR, leftIndent=T_BULLETS["indent"], bulletIndent=2, leading=T_FONTS["bullet"]["size"] + 3, spaceAfter=1)
+    strength_style = ParagraphStyle('ProfileStrength', parent=normal, fontName=T_FONTS["bullet"]["family"], fontSize=T_FONTS["bullet"]["size"], textColor=BODY_COLOR, leftIndent=10, bulletIndent=0, leading=T_FONTS["bullet"]["size"] + 3, spaceAfter=1)
 
 
 def clean(text):
@@ -344,7 +367,7 @@ def generate_cover_letter_pdf(data, filepath):
     doc.build(story, onFirstPage=cl_header, onLaterPages=cl_header)
 
 
-def main():
+def _legacy_main():
     if len(sys.argv) < 2:
         print("Usage: python3 generate_pdf.py <tailoring_json> [--skip-validation]")
         sys.exit(1)
@@ -472,7 +495,7 @@ def main():
             notes_path.write_text(notes)
             
             # Clean up JSON review file — only keep txt notes
-            review_path.unlink()
+            # Preserve source review JSON for auditability.
             
             if hr_score < 70 or hm_score < 70:
                 print(f'  ⚠ {company} (tech={qscore} HR={hr_score} HM={hm_score}) — review below threshold, PDF generated with notes')
@@ -481,7 +504,7 @@ def main():
         
         safe_co = "".join(c for c in company if c.isalnum() or c in " -_").strip()
         safe_ti = "".join(c for c in title if c.isalnum() or c in " -_").strip()
-        outpath = OUTPUT_DIR / f"{safe_co}_{safe_ti}_2026-07-17.pdf"
+        outpath = OUTPUT_DIR / f"{safe_co}_{safe_ti}_{datetime.now().strftime('%Y-%m-%d')}.pdf"
         generate_pdf(item, outpath)
         # Save cover letter as PDF
         cover = item.get('cover_letter', '')
@@ -493,5 +516,72 @@ def main():
             print(f"    Generated: {outpath.name}")
 
 
+def main():
+    """Generate only artifacts that pass mandatory candidate-aware validation."""
+    global OUTPUT_DIR, CONFIG, CANDIDATE, CANDIDATE_NAME, CAREER_ORDER
+    parser = argparse.ArgumentParser(description="Generate validated resume PDFs")
+    parser.add_argument("tailoring_json")
+    add_profile_argument(parser)
+    parser.add_argument("--overwrite", action="store_true", help="Replace existing generated artifacts")
+    args = parser.parse_args()
+
+    selected_dir, CONFIG = load_profile_config(args.profile_dir)
+    CANDIDATE = CONFIG.get("candidate", {})
+    CANDIDATE_NAME = CANDIDATE.get("name", "")
+    CAREER_ORDER = CANDIDATE.get("employment_history", [])
+    settings = CONFIG.get("resume_tailoring", {})
+    OUTPUT_DIR = configured_path(selected_dir, CONFIG, "resume_output", "output/resumes")
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    configure_theme(load_theme(selected_dir))
+
+    with open(args.tailoring_json, encoding="utf-8") as handle:
+        data = json.load(handle)
+    if not isinstance(data, list):
+        data = [data]
+
+    from quality_gate import score_entry
+    generated = 0
+    for item in data:
+        company = item.get("company", "Unknown")
+        title = item.get("title", "Role")
+        score, issues = score_entry(item, candidate=CANDIDATE, settings=settings)
+        threshold = int(settings.get("quality_gate_threshold", 75))
+        if issues or score < threshold:
+            print(f"REJECTED (mandatory validation): {company} ({score}/100)")
+            for issue in issues:
+                print(f"  {issue}")
+            continue
+
+        safe_company = "".join(c for c in company if c.isalnum() or c in " -_").strip()
+        safe_title = "".join(c for c in title if c.isalnum() or c in " -_").strip()
+        review_path = OUTPUT_DIR / f"{safe_company}_{safe_title}_review.json"
+        if settings.get("require_human_review", False):
+            if not review_path.exists():
+                print(f"REJECTED (mandatory review missing): {company}")
+                continue
+            with review_path.open(encoding="utf-8") as handle:
+                review = json.load(handle)
+            review_threshold = int(settings.get("human_review_threshold", 70))
+            scores = [review.get("hr_score", 0), review.get("hm_score", 0)]
+            if review.get("status") == "FAIL" or min(scores) < review_threshold:
+                print(f"REJECTED (mandatory review failed): {company}")
+                continue
+
+        date_stamp = datetime.now().strftime("%Y-%m-%d")
+        resume_path = safe_output_path(
+            OUTPUT_DIR / f"{safe_company}_{safe_title}_{date_stamp}.pdf", args.overwrite
+        )
+        generate_pdf(item, resume_path)
+        cover = item.get("cover_letter", "")
+        if cover:
+            cover_path = safe_output_path(
+                OUTPUT_DIR / f"{safe_company}_{safe_title}_cover_letter.pdf", args.overwrite
+            )
+            generate_cover_letter_pdf(item, cover_path)
+        generated += 1
+        print(f"Generated: {resume_path}")
+    return 0 if generated else 1
+
+
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

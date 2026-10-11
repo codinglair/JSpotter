@@ -2,17 +2,17 @@
 """
 LinkedIn Jobs Search Pipeline — browser-based, no login required.
 
-Searches LinkedIn Jobs for PM roles in two modes:
-  1. Greater Boston (local)
+Searches LinkedIn Jobs for configured roles in two modes:
+  1. Configured local searches
   2. Remote in USA
 
 Extracts job listings via JavaScript, outputs CSV + Markdown.
 
 Usage:
-  python3 search_linkedin.py              # search both Boston + Remote
-  python3 search_linkedin.py --boston      # Boston only
+  python3 search_linkedin.py              # search local + remote
+  python3 search_linkedin.py --local       # configured local only
   python3 search_linkedin.py --remote      # Remote only
-  python3 search_linkedin.py --keywords "principal product manager AI"
+  python3 search_linkedin.py --keywords "senior java engineer"
 """
 
 import argparse
@@ -25,10 +25,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-BASE_DIR = Path(__file__).parent
-OUTPUT_DIR = BASE_DIR / "output"
-OUTPUT_DIR.mkdir(exist_ok=True)
-CONFIG_PATH = BASE_DIR / "config.json"
+from profile_support import add_profile_argument, configured_path, load_profile_config, safe_output_path
 
 # LinkedIn Jobs search URL template
 # f_WT=2 = Remote filter, sortBy=DD = Date posted (newest first)
@@ -118,13 +115,12 @@ def extract_jobs_from_browser():
     pass
 
 
-def load_config():
-    """Load search config from config.json."""
-    with open(CONFIG_PATH) as f:
-        return json.load(f)
+def load_config(selected_profile=None):
+    """Load search config from the selected profile."""
+    return load_profile_config(selected_profile)
 
 
-def build_search_urls(config, keywords, boston=True, remote=True):
+def build_search_urls(config, keywords, local=True, remote=True, **legacy):
     """Build LinkedIn search URLs from config locations."""
     from urllib.parse import quote
     kw = quote(keywords)
@@ -137,13 +133,13 @@ def build_search_urls(config, keywords, boston=True, remote=True):
 
         if is_remote and not remote:
             continue
-        if not is_remote and not boston:
+        if not is_remote and not local:
             continue
 
         loc_encoded = quote(location_str)
         remote_filter = "&f_WT=2" if is_remote else ""
         urls.append({
-            "mode": "remote" if is_remote else "boston",
+            "mode": "remote" if is_remote else "local",
             "name": name,
             "url": LINKEDIN_SEARCH.format(keywords=kw, location=loc_encoded, remote_filter=remote_filter)
         })
@@ -164,21 +160,30 @@ def dedupe_jobs(jobs):
 
 
 def filter_by_keywords(jobs, keywords, config):
-    """Soft filter: keep product management roles based on config title_filter_terms."""
-    terms = config.get("search", {}).get("title_filter_terms")
-    if not terms:
-        raise ValueError("search.title_filter_terms not found in config.json")
+    """Keep complete listings matching configured title rules."""
+    search = config.get("search", {})
+    include = [str(term).lower() for term in search.get("title_include", search.get("title_filter_terms", []))]
+    exclude = [str(term).lower() for term in search.get("title_exclude", [])]
     filtered = []
     for j in jobs:
-        title_lower = j.get("title", "").lower()
-        if "product" in title_lower and any(term in title_lower for term in terms):
+        if not isinstance(j, dict):
+            continue
+        title_lower = str(j.get("title") or "").strip().lower()
+        url = str(j.get("url") or "").strip()
+        if not title_lower or not url:
+            continue
+        if include and not any(term in title_lower for term in include):
+            continue
+        if any(term in title_lower for term in exclude):
+            continue
+        if title_lower:
             filtered.append(j)
     return filtered
 
 
-def save_csv(jobs, date_str):
+def save_csv(jobs, date_str, output_dir, overwrite=False):
     """Save jobs to CSV."""
-    filename = OUTPUT_DIR / f"linkedin_jobs_{date_str}.csv"
+    filename = safe_output_path(output_dir / f"linkedin_jobs_{date_str}.csv", overwrite)
     with open(filename, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=[
             "date_found", "search_mode", "company", "title", "location", "url"
@@ -196,18 +201,18 @@ def save_csv(jobs, date_str):
     return filename
 
 
-def save_markdown(jobs, date_str):
+def save_markdown(jobs, date_str, output_dir, overwrite=False):
     """Save jobs to markdown summary grouped by company."""
-    filename = OUTPUT_DIR / f"linkedin_jobs_{date_str}.md"
+    filename = safe_output_path(output_dir / f"linkedin_jobs_{date_str}.md", overwrite)
     with open(filename, "w") as f:
         f.write(f"# LinkedIn Job Search Results — {date_str}\n\n")
         f.write(f"**{len(jobs)} jobs found**\n\n")
         
         # Split by mode
-        boston_jobs = [j for j in jobs if j.get("search_mode") == "boston"]
+        boston_jobs = [j for j in jobs if j.get("search_mode") in ("local", "boston")]
         remote_jobs = [j for j in jobs if j.get("search_mode") == "remote"]
         
-        for mode_name, mode_jobs in [("Greater Boston", boston_jobs), ("Remote USA", remote_jobs)]:
+        for mode_name, mode_jobs in [("Local", boston_jobs), ("Remote", remote_jobs)]:
             if not mode_jobs:
                 continue
             f.write(f"---\n\n## {mode_name} ({len(mode_jobs)} jobs)\n\n")
@@ -229,32 +234,36 @@ def save_markdown(jobs, date_str):
     return filename
 
 
-def save_raw_json(jobs, date_str):
+def save_raw_json(jobs, date_str, output_dir, overwrite=False):
     """Save raw JSON for downstream processing (scoring, etc)."""
-    filename = OUTPUT_DIR / f"linkedin_jobs_{date_str}.json"
+    filename = safe_output_path(output_dir / f"linkedin_jobs_{date_str}.json", overwrite)
     with open(filename, "w") as f:
         json.dump(jobs, f, indent=2)
     return filename
 
 
 def main():
-    config = load_config()
-
-    search_config = config.get("search", {})
-    if not search_config.get("keywords"):
-        print("ERROR: search.keywords not found in config.json")
-        sys.exit(1)
-
     parser = argparse.ArgumentParser(description="LinkedIn Jobs Search Pipeline")
-    parser.add_argument("--keywords", default=search_config["keywords"], help="Search keywords")
-    parser.add_argument("--boston", action="store_true", help="Search Greater Boston")
+    add_profile_argument(parser)
+    parser.add_argument("--keywords", help="Override configured search keywords")
+    parser.add_argument("--local", action="store_true", help="Search configured local locations")
+    parser.add_argument("--boston", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--remote", action="store_true", help="Search Remote USA")
     parser.add_argument("--input", help="Read pre-extracted jobs from JSON file instead of browser")
+    parser.add_argument("--overwrite", action="store_true", help="Replace same-day filtered outputs")
     args = parser.parse_args()
+    selected_dir, config = load_config(args.profile_dir)
+    search_config = config.get("search", {})
+    keywords = args.keywords or search_config.get("keywords")
+    if not keywords:
+        parser.error("search.keywords is required in the selected profile")
+    output_dir = configured_path(selected_dir, config, "output", "output")
+    output_dir.mkdir(parents=True, exist_ok=True)
     
     # If neither flag set, search both
-    search_boston = args.boston or (not args.boston and not args.remote)
-    search_remote = args.remote or (not args.boston and not args.remote)
+    explicit_local = args.local or args.boston
+    search_local = explicit_local or (not explicit_local and not args.remote)
+    search_remote = args.remote or (not explicit_local and not args.remote)
     
     date_str = datetime.now().strftime("%Y-%m-%d")
     
@@ -265,7 +274,7 @@ def main():
         print(f"Loaded {len(jobs)} jobs from {args.input}")
     else:
         # Print search URLs for the agent to navigate to
-        urls = build_search_urls(config, args.keywords, boston=search_boston, remote=search_remote)
+        urls = build_search_urls(config, keywords, local=search_local, remote=search_remote)
         print("SEARCH_URLS:")
         for u in urls:
             print(f"  {u['mode']}: {u['url']}")
@@ -284,13 +293,14 @@ def main():
     
     # Process extracted jobs
     jobs = dedupe_jobs(jobs)
-    jobs = filter_by_keywords(jobs, args.keywords, config)
+    jobs = filter_by_keywords(jobs, keywords, config)
+    jobs = jobs[:int(search_config.get("max_results_per_search", len(jobs) or 0))]
     
     print(f"After dedup + filter: {len(jobs)} jobs")
     
-    csv_path = save_csv(jobs, date_str)
-    md_path = save_markdown(jobs, date_str)
-    json_path = save_raw_json(jobs, date_str)
+    csv_path = save_csv(jobs, date_str, output_dir, args.overwrite)
+    md_path = save_markdown(jobs, date_str, output_dir, args.overwrite)
+    json_path = save_raw_json(jobs, date_str, output_dir, args.overwrite)
     
     print(f"\nSaved:")
     print(f"  CSV:  {csv_path}")

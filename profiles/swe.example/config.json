@@ -1,0 +1,25 @@
+{
+  "candidate": {
+    "name": "Sample Java Candidate",
+    "seniority": "senior",
+    "preferred_roles": ["java software engineer", "backend engineer"],
+    "skills": ["java", "spring boot", "sql", "maven", "git", "aws", "docker", "kafka"],
+    "certifications": [],
+    "domains": ["backend services"],
+    "locations": {"remote_us": true, "local": ["chicago", "illinois"]},
+    "employment_history": [{"employer": "Example Software Works", "title": "Senior Java Engineer", "start": "2021", "end": "Present"}]
+  },
+  "search": {
+    "keywords": "Java software engineer",
+    "locations": [{"name": "Chicago", "linkedin_filter": "Chicago, Illinois"}, {"name": "Remote USA", "linkedin_filter": "United States", "remote_only": true}],
+    "max_results_per_search": 70,
+    "title_include": ["java", "software engineer", "backend engineer"],
+    "title_exclude": ["intern", "mobile"]
+  },
+  "scoring": {"priority_thresholds": {"high": 75, "medium": 50}, "skill_vocabulary": ["java", "spring boot", "sql", "maven", "git", "aws", "docker", "kafka"]},
+  "resume_tailoring": {"bullet_max_words": 35, "summary_max_sentences": 4, "quality_gate_threshold": 75, "human_review_threshold": 70, "require_human_review": false, "require_supported_keywords": true},
+  "paths": {"journal": "journal.xlsx", "master_profile": "MASTER_PROFILE.md", "output": "output", "resume_output": "output/resumes", "theme": "theme.json"},
+  "credentials": {"dice": {"email": ""}, "linkedin": {"email": ""}},
+  "dedup": {"job_board_domains": ["indeed.com", "glassdoor.com", "ziprecruiter.com"]}
+}
+

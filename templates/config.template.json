@@ -1,21 +1,31 @@
 {
-  "_comment": "Copy to config.json and customize. See docs/SETUP.md for details.",
+  "_comment": "Copy this file to a private profile directory as config.json.",
   "candidate": {
-    "_comment": "Candidate name, career order, conflation metrics, and client keywords for validation",
     "name": "Your Name",
-    "career_order": [
-      {"keywords": ["Employer1"], "dates": "(Year–Year)"},
-      {"keywords": ["Employer2"], "dates": "(Year–Year)"}
-    ],
-    "conflation_metrics": {},
-    "client_keywords": {}
+    "seniority": "senior",
+    "preferred_roles": ["software engineer"],
+    "skills": ["java", "sql", "git"],
+    "certifications": [],
+    "domains": [],
+    "locations": {
+      "remote_us": true,
+      "local": ["chicago", "illinois"]
+    },
+    "employment_history": [
+      {
+        "employer": "Example Employer",
+        "title": "Software Engineer",
+        "start": "2022",
+        "end": "Present"
+      }
+    ]
   },
-"search": {
-    "keywords": "product manager AI",
+  "search": {
+    "keywords": "java software engineer",
     "locations": [
       {
-        "name": "Greater Boston",
-        "linkedin_filter": "Greater Boston"
+        "name": "Chicago",
+        "linkedin_filter": "Chicago, Illinois"
       },
       {
         "name": "Remote USA",
@@ -24,78 +34,42 @@
       }
     ],
     "max_results_per_search": 70,
-    "results_file": "output/linkedin_extract_today.json",
-    "title_filter_terms": ["manager", "director", "vp", "vice president", "head", "lead", "owner"]
+    "title_include": ["java", "software engineer"],
+    "title_exclude": ["intern", "principal"]
   },
   "scoring": {
     "priority_thresholds": {
-      "high": 80,
-      "medium": 65
+      "high": 75,
+      "medium": 50
     },
-    "domain_weights": {
-      "AI/ML": 8,
-      "Healthcare": 12,
-      "Finance": 8,
-      "Enterprise": 4,
-      "Cybersecurity": 8,
-      "E-commerce": 6,
-      "Infrastructure": 8,
-      "Mobile": 4
-    },
-    "candidate_domains": [
-      "AI/ML",
-      "Healthcare",
-      "Finance",
-      "Enterprise"
-    ],
-    "location_preferences": {
-      "exact_match": 10,
-      "remote": 8,
-      "other_us": 3
-    },
-    "preferred_location": "Boston"
+    "skill_vocabulary": ["java", "spring", "sql", "aws", "docker", "kubernetes"]
   },
   "resume_tailoring": {
     "bullet_max_words": 35,
+    "summary_max_sentences": 4,
     "quality_gate_threshold": 75,
     "human_review_threshold": 70,
-    "max_highlights": 4,
-    "max_bullets_per_highlight": 5
+    "require_human_review": false,
+    "require_supported_keywords": true
+  },
+  "paths": {
+    "journal": "journal.xlsx",
+    "master_profile": "MASTER_PROFILE.md",
+    "output": "output",
+    "resume_output": "output/resumes",
+    "theme": "theme.json"
   },
   "credentials": {
-    "_comment": "Local only — never push to repo. gitignore protects config.json.",
-    "dice": {
-      "email": "your_email@example.com",
-      "password": "***"
-    },
-    "linkedin": {
-      "email": "your_email@example.com",
-      "password": "***"
-    }
+    "_comment": "Prefer environment-managed credentials. Never commit real secrets.",
+    "dice": {"email": ""},
+    "linkedin": {"email": ""}
   },
   "dedup": {
-    "_comment": "Job board domains to filter out during Dice apply URL extraction",
     "job_board_domains": [
-      "efinancialcareers.com",
       "indeed.com",
       "glassdoor.com",
       "ziprecruiter.com",
-      "monster.com",
-      "careerbuilder.com",
-      "simplyhired.com",
-      "lensa.com",
-      "theladders.com"
+      "monster.com"
     ]
-  },
-  "journal": {
-    "path": "journal.xlsx",
-    "sheets": [
-      "Jobs",
-      "Applications",
-      "Resume Versions",
-      "Reference"
-    ]
-  },
-  "output_dir": "output",
-  "resume_dir": "resume/tailored"
+  }
 }

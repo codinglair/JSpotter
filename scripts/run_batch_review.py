@@ -9,10 +9,12 @@ Usage:
 
 import json
 import sys
+import argparse
 from pathlib import Path
+from profile_support import add_profile_argument, configured_path, load_profile_config, safe_output_path
 
 
-def build_batch_review_prompt(resume_paths, descs_cache_path='output/descriptions_cache.json'):
+def build_batch_review_prompt(resume_paths, descs_cache_path='output/descriptions_cache.json', review_output=None):
     """Build a single review prompt for multiple resumes."""
     
     with open(descs_cache_path) as f:
@@ -111,19 +113,20 @@ Write a JSON ARRAY to the output file specified below. Each element should have:
   "regenerate_feedback": "If FAIL, specific fix instructions"
 }}
 
-Write the JSON array to: {Path('resume/tailored/batch_review.json').absolute()}
+Write the JSON array to: {Path(review_output or 'batch_review.json').absolute()}
 
 NOTE: If multiple resumes are for the same company, check consistency — same HR and HM will see both.
 """
     return prompt, resumes
 
 
-def save_batch_reviews(batch_json_path, resumes):
+def save_batch_reviews(batch_json_path, resumes, output_dir=None, overwrite=False):
     """Split batch review JSON into individual review files and convert to txt notes."""
     with open(batch_json_path) as f:
         reviews = json.load(f)
     
-    output_dir = Path('resume/tailored')
+    output_dir = Path(output_dir or 'output/resumes')
+    output_dir.mkdir(parents=True, exist_ok=True)
     
     for review in reviews:
         company = review.get('company', 'Unknown')
@@ -134,7 +137,7 @@ def save_batch_reviews(batch_json_path, resumes):
         safe_ti = "".join(c for c in title if c.isalnum() or c in " -_").strip()
         
         # Save review JSON (will be cleaned up by generate_pdf.py)
-        review_json_path = output_dir / f"{safe_co}_{safe_ti}_review.json"
+        review_json_path = safe_output_path(output_dir / f"{safe_co}_{safe_ti}_review.json", overwrite)
         with open(review_json_path, 'w') as f:
             json.dump(review, f, indent=2)
         
@@ -159,31 +162,43 @@ def save_batch_reviews(batch_json_path, resumes):
         if status == 'FAIL' or hr_score < 70 or hm_score < 70:
             notes += f"\nRegenerate Feedback: {review.get('regenerate_feedback', '')}\n"
         
-        notes_path = output_dir / f"{safe_co}_{safe_ti}_review_notes.txt"
+        notes_path = safe_output_path(output_dir / f"{safe_co}_{safe_ti}_review_notes.txt", overwrite)
         notes_path.write_text(notes)
         
         # Clean up JSON
-        review_json_path.unlink()
+        # Preserve source review JSON for auditability.
         
         print(f"  {company} — {title}: HR={hr_score} HM={hm_score} {status}")
 
 
 def main():
-    if len(sys.argv) < 2:
-        print("Usage: python3 run_batch_review.py <resume1.json> <resume2.json> [resume3.json] ...")
-        print("Reviews multiple resumes in one subagent call. Up to 4 resumes per batch.")
-        sys.exit(1)
-    
-    resume_paths = sys.argv[1:]
+    parser = argparse.ArgumentParser(description="Build or save a profile-scoped batch review")
+    parser.add_argument("resumes", nargs="*")
+    add_profile_argument(parser)
+    parser.add_argument("--save", action="store_true")
+    parser.add_argument("--overwrite", action="store_true")
+    args = parser.parse_args()
+    selected_dir, config = load_profile_config(args.profile_dir)
+    output_dir = configured_path(selected_dir, config, "output", "output")
+    resume_output = configured_path(selected_dir, config, "resume_output", "output/resumes")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    resume_output.mkdir(parents=True, exist_ok=True)
+    batch_path = resume_output / "batch_review.json"
+    if args.save:
+        save_batch_reviews(batch_path, [], resume_output, args.overwrite)
+        return
+    if not args.resumes:
+        parser.error("provide at least one resume JSON, or use --save")
+    resume_paths = args.resumes
     if len(resume_paths) > 4:
         print(f"Warning: {len(resume_paths)} resumes provided, max 4 per batch. Processing first 4.")
         resume_paths = resume_paths[:4]
     
-    prompt, resumes = build_batch_review_prompt(resume_paths)
+    prompt, resumes = build_batch_review_prompt(resume_paths, output_dir / "descriptions_cache.json", batch_path)
     
     # Write prompt to file for subagent dispatch
-    prompt_path = Path('output/batch_review_prompt.txt')
-    prompt_path.write_text(prompt)
+    prompt_path = safe_output_path(output_dir / 'batch_review_prompt.txt', args.overwrite)
+    prompt_path.write_text(prompt, encoding="utf-8")
     
     print(f"Generated batch review prompt for {len(resumes)} resumes")
     print(f"Prompt saved to: {prompt_path}")
@@ -194,7 +209,4 @@ def main():
 
 
 if __name__ == '__main__':
-    if '--save' in sys.argv:
-        save_batch_reviews(Path('resume/tailored/batch_review.json'), [])
-    else:
-        main()
+    main()

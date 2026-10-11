@@ -1,77 +1,42 @@
 # JSpotter
 
-![JSpotter](JSpotter.png)
+JSpotter is a profile-scoped job-search assistant for browser extraction, deterministic fit scoring, resume generation, and Excel tracking. It does not submit applications.
 
-AI-powered job hunting automation pipeline — LinkedIn search, LLM scoring, resume tailoring, and application tracking.
+## Supported profiles
 
-## Pipeline Stages
+Each private profile directory contains:
 
-1. **Daily Job Search** — LinkedIn browser extraction (Boston + Remote)
-2. **AI Scoring** — Match score, ATS score, interview probability (defined algorithms)
-3. **Prioritization** — High/Medium/Low priority based on match score
-4. **Resume Tailoring** — LLM-generated tailored resumes with PDF output
-5. **Quality Gates** — Technical scoring (formula compliance, anti-conflation, ATS keywords) + human review (HR/HM perspectives)
-6. **Application Tracking** — Journal-based tracking with status workflow and color coding
+- `config.json` — candidate facts, search rules, scoring vocabulary, thresholds, and paths
+- `MASTER_PROFILE.md` — verified career narrative used for agent-assisted tailoring
+- `journal.xlsx` — isolated tracking data
+- `output/` — extracts, caches, reviews, and generated artifacts
 
-## Getting Started
+Select a profile on every command with `--profile-dir`. Synthetic SDET and Java examples are available under `profiles/`.
 
-1. Copy `templates/MASTER_PROFILE.template.md` and fill in your career details
-2. Copy `templates/config.template.json` and configure your search parameters
-3. Run the pipeline scripts in order
+## Windows quick start
 
-See [docs/SETUP.md](docs/SETUP.md) for detailed instructions.
+See [docs/SETUP.md](docs/SETUP.md). The offline workflow is:
 
-## Automation
-
-Daily job search runs automatically via Hermes cron. See [docs/CRON.md](docs/CRON.md) for setup and troubleshooting.
-
-## Project Structure
-
-```
-JSpotter/
-├── scripts/                    # Pipeline scripts
-│   ├── search_linkedin.py      # LinkedIn browser extraction
-│   ├── journal.py              # Journal management (add, init, status)
-│   ├── run_scoring.py          # Full scoring pipeline (match, ATS, interview prob)
-│   ├── match_score.py          # Match score algorithm
-│   ├── ats_score.py            # ATS keyword overlap score
-│   ├── interview_prob.py       # Interview probability algorithm
-│   ├── generate_pdf.py         # PDF + cover letter generator (ReportLab)
-│   ├── quality_gate.py         # Technical quality gate (6 checks, 100pts)
-│   ├── validate_tailoring.py   # Structural validation + auto-fix
-│   ├── run_batch_review.py     # Batch LLM review (multiple resumes in one call)
-│   ├── adapt_resume.py         # Same-company resume adapter
-│   └── run_review.py           # Single resume LLM review
-├── templates/                  # All templates (generic, no personal data)
-│   ├── MASTER_PROFILE.template.md
-│   ├── config.template.json
-│   ├── theme.template.json
-│   ├── tailoring_prompt_template.md
-│   ├── review_prompt_template.md
-│   └── cron_template.md
-├── docs/                       # Setup and usage documentation
-│   ├── SETUP.md                # Installation and configuration
-│   └── CRON.md                 # Cron job setup and troubleshooting
-├── CHANGELOG.md                # Release history
-└── README.md
+```powershell
+py -m pip install -r requirements.txt
+py scripts/journal.py --profile-dir .\profiles\sdet --init
+py scripts/search_linkedin.py --profile-dir .\profiles\sdet
+# Hermes/browser: visit the printed URL, run the printed extraction JavaScript,
+# and save its JSON to .\profiles\sdet\output\linkedin_extract.json.
+.\scripts\run_profile.ps1 -ProfileDir .\profiles\sdet -ExtractFile .\profiles\sdet\output\linkedin_extract.json -Source linkedin -Python py
 ```
 
-## Key Files (not in repo — create locally)
+Use `profiles\swe` for the Java profile. Never put private profiles under version control.
 
-| File | Purpose |
-|------|---------|
-| `tailoring_prompt_local.md` | Working tailoring prompt with personal data |
-| `config.json` | Search keywords, locations, scoring thresholds, career order |
-| `theme.json` | Resume design (fonts, colors, margins, education, contact info) |
-| `journal.xlsx` | Job tracking (5 sheets, color-coded statuses) |
-| `resume/MASTER_PROFILE.md` | Your career profile |
+## Safety
 
-## Requirements
+- Existing journals and generated artifacts are not overwritten unless an explicit force/overwrite option is supplied.
+- Missing descriptions remain unscored and retryable.
+- Mandatory validation failures prevent PDF generation.
+- JSpotter does not implement autonomous application submission. Opening an Apply link is only for discovering an employer ATS URL and must stop before form submission.
 
-- Python 3.10+
-- openpyxl, reportlab
-- Hermes Agent (for LLM scoring and resume tailoring)
+## Tests
 
-## License
-
-MIT
+```powershell
+py -m unittest discover -s tests -v
+```

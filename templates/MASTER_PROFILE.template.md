@@ -54,7 +54,7 @@ Example: "Shipped LLM-powered review-triage agent classifying sentiment and auto
 
 ## 5. Core Skills
 
-### Product Management
+### Primary Professional Skills
 - [Skill]
 - [Skill]
 
