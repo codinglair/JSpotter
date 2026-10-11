@@ -1,0 +1,12 @@
+{
+  "changelists": [
+    {
+      "name": "Default",
+      "files": [
+        "scripts/run_scoring.py",
+        ".vscode/changelists.json"
+      ]
+    }
+  ],
+  "active": "Default"
+}

@@ -60,7 +60,12 @@ def fetch_job_description(url, timeout=20):
              "-H", f"Accept: {HEADERS['Accept']}",
              "-H", f"Accept-Language: {HEADERS['Accept-Language']}",
              url],
-            capture_output=True, text=True, timeout=timeout + 5
+            #capture_output=True, text=True, timeout=timeout + 5
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout + 5
         )
         html = result.stdout
         if not html or len(html) < 1000:
