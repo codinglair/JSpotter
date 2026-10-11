@@ -13,6 +13,7 @@ Usage:
   python3 search_linkedin.py --local       # configured local only
   python3 search_linkedin.py --remote      # Remote only
   python3 search_linkedin.py --keywords "senior java engineer"
+  python3 search_linkedin.py --input jobs.json --input-mode remote
 """
 
 import argparse
@@ -198,6 +199,18 @@ def filter_by_keywords(jobs, keywords, config):
     return filtered
 
 
+def apply_search_mode(jobs, input_mode=None):
+    """Preserve valid job modes and apply an explicit input context to the rest."""
+    fallback = input_mode if input_mode in ("local", "remote") else "unknown"
+    normalized = []
+    for job in jobs:
+        job = dict(job)
+        if job.get("search_mode") not in ("local", "remote"):
+            job["search_mode"] = fallback
+        normalized.append(job)
+    return normalized
+
+
 def save_csv(jobs, date_str, output_dir, overwrite=False):
     """Save jobs to CSV."""
     filename = safe_output_path(output_dir / f"linkedin_jobs_{date_str}.csv", overwrite)
@@ -226,10 +239,15 @@ def save_markdown(jobs, date_str, output_dir, overwrite=False):
         f.write(f"**{len(jobs)} jobs found**\n\n")
         
         # Split by mode
-        boston_jobs = [j for j in jobs if j.get("search_mode") in ("local", "boston")]
+        local_jobs = [j for j in jobs if j.get("search_mode") == "local"]
         remote_jobs = [j for j in jobs if j.get("search_mode") == "remote"]
+        unknown_jobs = [j for j in jobs if j.get("search_mode") not in ("local", "remote")]
         
-        for mode_name, mode_jobs in [("Local", boston_jobs), ("Remote", remote_jobs)]:
+        for mode_name, mode_jobs in [
+            ("Local", local_jobs),
+            ("Remote", remote_jobs),
+            ("Unknown", unknown_jobs),
+        ]:
             if not mode_jobs:
                 continue
             f.write(f"---\n\n## {mode_name} ({len(mode_jobs)} jobs)\n\n")
@@ -267,6 +285,11 @@ def main():
     parser.add_argument("--boston", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--remote", action="store_true", help="Search Remote USA")
     parser.add_argument("--input", help="Read pre-extracted jobs from JSON file instead of browser")
+    parser.add_argument(
+        "--input-mode",
+        choices=("local", "remote"),
+        help="Extraction context for jobs in --input that do not already specify search_mode",
+    )
     parser.add_argument("--overwrite", action="store_true", help="Replace same-day filtered outputs")
     args = parser.parse_args()
     selected_dir, config = load_config(args.profile_dir)
@@ -311,6 +334,7 @@ def main():
     # Process extracted jobs
     jobs = dedupe_jobs(jobs)
     jobs = filter_by_keywords(jobs, keywords, config)
+    jobs = apply_search_mode(jobs, args.input_mode)
     jobs = jobs[:int(search_config.get("max_results_per_search", len(jobs) or 0))]
     
     print(f"After dedup + filter: {len(jobs)} jobs")
